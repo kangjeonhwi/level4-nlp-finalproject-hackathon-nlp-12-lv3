@@ -13,7 +13,7 @@ from transformers import WhisperFeatureExtractor
 import os
 
 # Add custom module path
-sys.path.append(str(Path(__file__).parent / "audiolm-trainer"))
+# sys.path.append(str(Path(__file__).parent / "audiolm-trainer"))
 
 # Custom modules
 from models.salmonn import SALMONN
