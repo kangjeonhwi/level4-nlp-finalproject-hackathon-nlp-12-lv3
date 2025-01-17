@@ -8,7 +8,7 @@ from pathlib import Path
 from tqdm import tqdm
 
 # Add custom module path
-sys.path.append(str(Path(__file__).parent / "audiolm-trainer"))
+# sys.path.append(str(Path(__file__).parent / "audiolm-trainer"))
 
 # Custom modules
 from salmonn_utils import SALMONNTestDataset, load_preprocessor, load_model

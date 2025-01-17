@@ -18,7 +18,7 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 from transformers import WhisperFeatureExtractor
 
 # From trainer
-sys.path.append(str(Path().parent / "audiolm-trainer"))
+# sys.path.append(str(Path().parent / "audiolm-trainer"))
 from config import Config
 from dataset import SALMONNDataset
 from utils import get_dataloader, prepare_sample

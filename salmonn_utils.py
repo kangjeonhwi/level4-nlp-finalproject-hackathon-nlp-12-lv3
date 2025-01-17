@@ -11,7 +11,7 @@ from torch.nn.utils.rnn import pad_sequence
 from transformers import WhisperFeatureExtractor
 
 # Add custom module path
-sys.path.append(str(Path(__file__).parent / "audiolm-trainer"))
+# sys.path.append(str(Path(__file__).parent / "audiolm-trainer"))
 
 # Custom modules
 from models.salmonn import SALMONN
