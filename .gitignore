@@ -3,3 +3,10 @@ __pycache__
 /outputs_stage2
 /wandb
 /data
+/__pycache__
+*.pyc
+.vscode
+*.json
+*.csv
+*.pt
+*.pth
