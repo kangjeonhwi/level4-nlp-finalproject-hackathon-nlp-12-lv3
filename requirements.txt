@@ -11,3 +11,5 @@ gradio==3.23.0
 wandb==0.19.1
 omegaconf==2.3.0
 tensorboardX==2.6.2.2
+editdistance==0.8.1
+sacrebleu==1.5.1
