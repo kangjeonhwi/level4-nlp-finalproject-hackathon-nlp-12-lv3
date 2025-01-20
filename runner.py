@@ -287,6 +287,38 @@ class Runner:
                 json.dump(result, open(final_result_file, "w", encoding="utf-8"), ensure_ascii=False)
 
             print("result file saved to %s" % final_result_file)
+            
+    @torch.no_grad()
+    def extract_speech_embeddings(self, spectrogram, raw_wav=None, audio_padding_mask=None):
+        self.eval()  # 모델을 평가 모드로 전환 (Dropout 비활성화)
+        
+        speech_embeds, _ = self.encode_speech(
+            spectrogram, raw_wav=raw_wav, audio_padding_mask=audio_padding_mask
+        )
+        
+        return speech_embeds 
+    
+    @torch.no_grad()
+    def extract_embeddings_for_dataset(model, dataloader, save_dir, dataset_name):
+        model.eval()  # 모델을 평가 모드로 전환
+        os.makedirs(save_dir, exist_ok=True)
+
+        for idx, samples in enumerate(dataloader):
+            # 데이터 준비
+            spectrogram = samples["spectrogram"]
+            raw_wav = samples.get("raw_wav", None)
+            audio_padding_mask = samples.get("padding_mask", None)
+
+            # 임베딩 추출
+            with torch.no_grad():
+                speech_embeds = model.extract_speech_embeddings(
+                    spectrogram, raw_wav=raw_wav, audio_padding_mask=audio_padding_mask
+                )
+
+            # 저장 경로 지정
+            save_path = os.path.join(save_dir, f"{dataset_name}_embeds_{idx}.pt")
+            torch.save(speech_embeds.cpu(), save_path)
+            print(f"Saved {dataset_name} embeddings to {save_path}")
 
     def train(self):
         start_time = time.time()
