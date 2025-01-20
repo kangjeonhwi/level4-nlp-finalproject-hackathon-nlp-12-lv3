@@ -1,0 +1,48 @@
+model:
+  # paths to model components
+  llama_path: "meta-llama/Llama-3.2-3B-Instruct"  # LLaMA 모델 경로
+  whisper_path: "openai/whisper-large-v2"          # Whisper 모델 경로
+  beats_path: "/root/base_data/checkpoints/BEATs_iter3_plus_AS2M_finetuned_on_AS2M_cpt2/BEATs_iter3_plus_AS2M_finetuned_on_AS2M_cpt2.pt"  # BEATs 모델 경로
+
+  token: ""  # Hugging Face 토큰 (필요 시 입력)
+
+  # model settings
+  freeze_whisper: True          # Whisper 모델 동결 여부
+  freeze_beats: True            # BEATs 모델 동결 여부
+
+  use_speech_Qformer: True      # Q-Former 사용 여부
+  freeze_speech_QFormer: False  # Q-Former 동결 여부
+
+  speech_llama_proj_model: ""   # Speech-to-LLaMA 프로젝션 모델 경로
+  freeze_speech_llama_proj: False  # Speech-to-LLaMA 프로젝션 동결 여부
+
+  lora: True                    # LoRA 사용 여부
+  lora_rank: 8                  # LoRA rank
+  lora_alpha: 32                # LoRA alpha 값
+  lora_dropout: 0.1             # LoRA dropout 비율
+
+  max_txt_len: 300              # 최대 텍스트 길이
+
+pruner:
+  pruner_type: "taylor"             # 가지치기 방법 (random, l1, l2, taylor)
+  pruning_ratio: 0.5            # 가지치기 비율
+  iterative_steps: 1            # 가지치기 반복 단계 수
+  grouping_strategy: "sum"      # 가지치기 그룹화 방식 (Taylor pruning에 필요)
+  global_pruning: False         # 글로벌 가지치기 활성화 여부
+
+run:
+  test_before_train: True       # 가지치기 전 모델 테스트 여부
+  test_after_train: True        # 가지치기 후 모델 테스트 여부
+  save_model: True              # 가지치기 후 모델 저장 여부
+  batch_size_eval: 8            # 평가 시 배치 크기
+  num_examples: 10              # 가지치기 시 사용할 예제 개수
+  max_seq_len: 128              # 최대 시퀀스 길이
+  device: "cuda"                # 실행 장치 (cuda 또는 cpu)
+
+logging:
+  save_ckpt_log_name: "llama_prune_log"  # 로그 및 체크포인트 이름
+
+datasets:
+  prefix: "/root/base_data/datasets"  # 데이터셋 기본 경로
+  test_ann_path_asr: "data/test_asr.json"  # ASR 태스크 주석 경로
+  test_ann_path_aac: "data/test_aac.json"  # AAC 태스크 주석 경로
