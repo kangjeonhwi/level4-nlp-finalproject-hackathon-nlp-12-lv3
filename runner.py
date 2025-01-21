@@ -301,6 +301,7 @@ class Runner:
         speech_embeds, _ = model.encode_speech(
             spectrogram, raw_wav=raw_wav, audio_padding_mask=audio_padding_mask
         )
+        print("Encoded Speech stats:", torch.isnan(speech_embeds).sum(), speech_embeds.shape)
         
         return speech_embeds 
     
@@ -316,12 +317,17 @@ class Runner:
             spectrogram = samples["spectrogram"]
             raw_wav = samples.get("raw_wav", None)
             audio_padding_mask = samples.get("padding_mask", None)
+            
+            print("Spectrogram stats:", torch.isnan(spectrogram).sum(), spectrogram.shape)
+            print("Raw WAV stats:", raw_wav if raw_wav is None else torch.isnan(raw_wav).sum())
 
             # 임베딩 추출
             with torch.no_grad():
                 speech_embeds = self.extract_speech_embeddings(
                     spectrogram, raw_wav=raw_wav, audio_padding_mask=audio_padding_mask
                 )
+                
+                print("Speech Embeddings stats:", torch.isnan(speech_embeds).sum(), speech_embeds.shape)
 
             # 저장 경로 지정
             save_path = os.path.join(save_dir, f"{dataset_name}_embeds_{idx}.pt")

@@ -230,8 +230,12 @@ class SALMONN(nn.Module):
         with self.maybe_autocast():
             if self.use_speech_Qformer:
                 speech_embeds = self.ln_speech(speech_embeds)
+                print("After ln_speech:", torch.isnan(speech_embeds).sum(), speech_embeds.shape)
                 if audio_embeds is not None:
+                    print("Before padding audio_embeds:", torch.isnan(audio_embeds).sum(), audio_embeds.shape)
+                    print("Before padding speech_embeds:", torch.isnan(speech_embeds).sum(), speech_embeds.shape)
                     audio_embeds = self.ln_audio(audio_embeds)
+                    print("After ln_audio:", torch.isnan(audio_embeds).sum(), audio_embeds.shape)
                     if audio_embeds.size(1) < speech_embeds.size(1):
                         audio_embeds = F.pad(audio_embeds, (0, 0, 0, speech_embeds.size(1) - audio_embeds.size(1)))
                     elif audio_embeds.size(1) > speech_embeds.size(1):
@@ -247,6 +251,7 @@ class SALMONN(nn.Module):
                     stride = (1, stride)
                     speech_embeds_tr = speech_embeds.transpose(1, 2).unsqueeze(2)
                     speech_embeds_overlap = F.unfold(speech_embeds_tr, kernel_size=kernel, dilation=1, padding=0, stride=stride)
+                    print("After F.unfold:", torch.isnan(speech_embeds_overlap).sum(), speech_embeds_overlap.shape)
                     _, _, L = speech_embeds_overlap.shape
                     speech_embeds_overlap = speech_embeds_overlap.view(B, -1, kernel[1], L)
                     speech_embeds_overlap = torch.permute(speech_embeds_overlap, [0, 3, 2, 1])
@@ -260,8 +265,9 @@ class SALMONN(nn.Module):
                     encoder_attention_mask=speech_atts,
                     return_dict=True,
                 )
+                print("After Qformer:", torch.isnan(query_output.last_hidden_state).sum(), query_output.last_hidden_state.shape)
                 speech_embeds = self.speech_llama_proj(query_output.last_hidden_state)
-
+                print("After speech_llama_proj:", torch.isnan(speech_embeds).sum(), speech_embeds.shape)
                 if self.window_level_Qformer:
                     speech_embeds = speech_embeds.view(B, -1, speech_embeds.size(2)).contiguous()
 
