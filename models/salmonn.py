@@ -419,7 +419,7 @@ class SALMONN(nn.Module):
 
         return {"loss": loss}
 
-    def generate(self, samples, generate_cfg, prompts=None):
+    def generate(self, samples, generate_cfg, prompt=None):
         batch_size = samples["spectrogram"].shape[0]
 
         spectrogram = samples["spectrogram"]
@@ -428,9 +428,16 @@ class SALMONN(nn.Module):
 
         speech_embeds, speech_atts = self.encode_speech(spectrogram, raw_wav=raw_wav, audio_padding_mask=audio_padding_mask)
 
-        if prompts is not None:
-            speech_embeds, speech_atts = self.prompt_wrap(speech_embeds, speech_atts, prompts, multi_prompt=True)
+        if prompt is None and self.test_prompt_dict:
+            if self.multi_prompt:
+                prompt = [self.test_prompt_dict[task] for task in samples["task"]]
+                if "Q" in samples:
+                    prompt = [p.format(q) if '{}' in p else p for p, q in zip(prompt, samples["Q"]) ]
+            else:
+                prompt = self.prompt_dict[samples["task"][0]]
 
+        speech_embeds, speech_atts = self.prompt_wrap(speech_embeds, speech_atts, prompt, multi_prompt=True)
+        
         bos = torch.ones(
             [batch_size, 1],
             dtype=torch.int32,
