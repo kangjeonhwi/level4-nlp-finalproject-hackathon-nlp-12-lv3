@@ -24,7 +24,7 @@ def get_salmonn_examples(datasets_config, llama_tokenizer, n_samples, seq_len):
     # 데이터 로더 설정
     dataset = SALMONNTestDataset(
         prefix=datasets_config['prefix'],
-        ann_path=datasets_config['test_ann_path_asr'],  # ASR 태스크 기준 경로 사용
+        ann_path=datasets_config['pruning_sample_path'],  
         whisper_path=datasets_config['whisper_path'],
     )
     dataloader = DataLoader(dataset, batch_size=n_samples, shuffle=True)

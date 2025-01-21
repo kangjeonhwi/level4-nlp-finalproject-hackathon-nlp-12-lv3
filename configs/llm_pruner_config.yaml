@@ -24,7 +24,7 @@ model:
   max_txt_len: 300              # 최대 텍스트 길이
 
 pruner:
-  pruner_type: "taylor"             # 가지치기 방법 (random, l1, l2, taylor)
+  pruner_type: "taylor"         # 가지치기 방법 (random, l1, l2, taylor)
   pruning_ratio: 0.5            # 가지치기 비율
   iterative_steps: 1            # 가지치기 반복 단계 수
   grouping_strategy: "sum"      # 가지치기 그룹화 방식 (Taylor pruning에 필요)
@@ -43,6 +43,5 @@ logging:
   save_ckpt_log_name: "llama_prune_log"  # 로그 및 체크포인트 이름
 
 datasets:
-  prefix: "/root/base_data/datasets"  # 데이터셋 기본 경로
-  test_ann_path_asr: "data/test_asr.json"  # ASR 태스크 주석 경로
-  test_ann_path_aac: "data/test_aac.json"  # AAC 태스크 주석 경로
+  prefix: "/data/home/datasets"  # 데이터셋 기본 경로
+  pruning_sample_path: "data/pruning_sample.json"  # 가지치기 샘플 경로
