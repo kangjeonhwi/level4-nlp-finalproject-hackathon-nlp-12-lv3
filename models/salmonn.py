@@ -29,6 +29,7 @@ from .modeling_whisper import WhisperModel
 from .beats.BEATs import BEATsConfig, BEATs
 from .utils import StoppingCriteriaSub
 
+from typing import Dict, List
 
 class SALMONN(nn.Module):
     @classmethod
@@ -86,6 +87,7 @@ class SALMONN(nn.Module):
 
         multi_prompt=False,
         prompt_path="",
+        test_prompt_path="",
         prompt_template="",
         max_txt_len=128,
         end_sym="</s>",
@@ -214,7 +216,7 @@ class SALMONN(nn.Module):
             raise NotImplementedError
 
         # prepare prompts
-        self.prompt_dict = {}
+        self.prompt_dict : Dict[str, List[str]] = {}
         if prompt_path:
             try:
                 raw_prompts = json.load(open(prompt_path, "r"))
@@ -225,6 +227,16 @@ class SALMONN(nn.Module):
                 filted_prompts = [raw_prompt for raw_prompt in raw_prompts[task] if "<SpeechHere>" in raw_prompt]
                 self.prompt_dict[task] = [prompt_template.format(p) for p in filted_prompts]
             print("Loading training prompts done!")
+        
+        self.test_prompt_dict : Dict[str, str] = {}
+        if test_prompt_path:
+            try:
+                raw_prompts = json.load(open(test_prompt_path, "r"))
+            except:
+                print("Failed to load prompt! Try to use utf-8 encoding.")
+                raw_prompts = json.load(open(test_prompt_path, "r", encoding='utf-8'))
+            self.test_prompt_dict = raw_prompts
+            print("Loading test prompts done!")
 
     def _encode_auditory_feature(self, speech_embeds, audio_embeds=None):
         with self.maybe_autocast():
@@ -475,6 +487,7 @@ class SALMONN(nn.Module):
 
         multi_prompt = config.get("multi_prompt", False)
         prompt_path = config.get("prompt_path", "")
+        test_prompt_path = config.get("test_prompt_path", "")
         prompt_template = config.get("prompt_template", "")
         max_txt_len = config.get("max_txt_len", 128)
         end_sym = config.get("end_sym", "</s>")
@@ -504,6 +517,7 @@ class SALMONN(nn.Module):
             lora_dropout=lora_dropout,
             multi_prompt=multi_prompt,
             prompt_path=prompt_path,
+            test_prompt_path=test_prompt_path,
             prompt_template=prompt_template,
             max_txt_len=max_txt_len,
             end_sym=end_sym,
