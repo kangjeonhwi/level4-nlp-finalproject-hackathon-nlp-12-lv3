@@ -122,13 +122,34 @@ class BEATs(nn.Module):
             fbank_std: float = 6.55582,
     ) -> torch.Tensor:
         fbanks = []
-        for waveform in source:
+        for i, waveform in enumerate(source):
+            print(f"Waveform {i}: min={waveform.min()}, max={waveform.max()}, mean={waveform.mean()}, std={waveform.std()}")
+
+            # 스케일링
             waveform = waveform.unsqueeze(0) * 2 ** 15
-            fbank = ta_kaldi.fbank(waveform, num_mel_bins=128, sample_frequency=16000, frame_length=25, frame_shift=10)
+            print(f"Scaled Waveform {i}: min={waveform.min()}, max={waveform.max()}, mean={waveform.mean()}, std={waveform.std()}")
+
+            # 멜 필터뱅크 계산
+            fbank = ta_kaldi.fbank(
+                waveform,
+                num_mel_bins=128,
+                sample_frequency=16000,
+                frame_length=25,
+                frame_shift=10
+            )
+            print(f"Fbank {i}: shape={fbank.shape}, min={fbank.min()}, max={fbank.max()}, mean={fbank.mean()}, std={fbank.std()}")
             fbanks.append(fbank)
+
+        # 멜 필터뱅크 스택
         fbank = torch.stack(fbanks, dim=0)
+        print(f"Stacked Fbank: shape={fbank.shape}, min={fbank.min()}, max={fbank.max()}, mean={fbank.mean()}, std={fbank.std()}")
+
+        # 정규화
         fbank = (fbank - fbank_mean) / (2 * fbank_std)
+        print(f"Normalized Fbank: shape={fbank.shape}, min={fbank.min()}, max={fbank.max()}, mean={fbank.mean()}, std={fbank.std()}")
+
         return fbank
+
 
     def extract_features(
             self,
@@ -138,33 +159,47 @@ class BEATs(nn.Module):
             fbank_std: float = 6.55582,
             feature_only=False,
     ):
+        print("args_list: source", source, torch.isnan(source).sum(), source.shape)
+        print("args_list: padding_mask", padding_mask)
+        print("args_list: fbank_mean", fbank_mean)
+        print("args_list: fbank_std", fbank_std)
         fbank = self.preprocess(source, fbank_mean=fbank_mean, fbank_std=fbank_std).to(torch.float32)
+        print("After preprocess:", torch.isnan(fbank).sum(), fbank.shape)
 
         if padding_mask is not None:
             padding_mask = self.forward_padding_mask(fbank, padding_mask)
 
         fbank = fbank.unsqueeze(1)
         features = self.patch_embedding(fbank)
+        print("After patch_embedding:", torch.isnan(features).sum(), features.shape)
+        
         features = features.reshape(features.shape[0], features.shape[1], -1)
         features = features.transpose(1, 2)
+        print("After reshape/transpose:", torch.isnan(features).sum(), features.shape)
+        
         features = self.layer_norm(features)
+        print("After layer_norm:", torch.isnan(features).sum(), features.shape)
 
         if padding_mask is not None:
             padding_mask = self.forward_padding_mask(features, padding_mask)
 
         if self.post_extract_proj is not None:
             features = self.post_extract_proj(features)
+            print("After post_extract_proj:", torch.isnan(features).sum(), features.shape)
 
         x = self.dropout_input(features)
+        print("After dropout_input:", torch.isnan(x).sum(), x.shape)
 
         x, layer_results = self.encoder(
             x,
             padding_mask=padding_mask,
         )
+        print("After encoder:", torch.isnan(x).sum(), x.min(), x.max(), x.shape)
 
         if not feature_only and self.predictor is not None:
             x = self.predictor_dropout(x)
             logits = self.predictor(x)
+            print("After predictor:", torch.isnan(logits).sum(), logits.min(), logits.max(), logits.shape)
 
             if padding_mask is not None and padding_mask.any():
                 logits[padding_mask] = 0
@@ -174,7 +209,9 @@ class BEATs(nn.Module):
                 logits = logits.mean(dim=1)
 
             lprobs = torch.sigmoid(logits)
+            print("After sigmoid:", torch.isnan(lprobs).sum(), lprobs.min(), lprobs.max(), lprobs.shape)
 
             return lprobs, padding_mask
         else:
+            print("Returning features only:", torch.isnan(x).sum(), x.shape)
             return x, padding_mask
