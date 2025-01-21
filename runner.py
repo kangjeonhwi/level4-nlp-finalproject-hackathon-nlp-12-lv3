@@ -17,7 +17,7 @@ from dist_utils import main_process, is_dist_avail_and_initialized, is_main_proc
 from logger import MetricLogger, SmoothedValue
 from utils import get_dataloader, prepare_sample
 from optims import get_optimizer, LinearWarmupCosineLRScheduler
-
+from tqdm import tqdm
 
 class Runner:
     def __init__(self, cfg, model, datasets, job_id, dryrun):
@@ -69,7 +69,7 @@ class Runner:
         # dataloaders
         self.train_loader = get_dataloader(datasets["train"], self.config.config.run, is_train=True, use_distributed=self.use_distributed)
         self.valid_loader = get_dataloader(datasets["valid"], self.config.config.run, is_train=False, use_distributed=self.use_distributed)
-        self.test_loader = get_dataloader(datasets["test"], self.config.config.run, is_train=False, use_distributed=self.use_distributed)
+
 
         # scaler
         self.use_amp = self.config.config.run.get("amp", False)
@@ -290,20 +290,28 @@ class Runner:
             
     @torch.no_grad()
     def extract_speech_embeddings(self, spectrogram, raw_wav=None, audio_padding_mask=None):
-        self.eval()  # 모델을 평가 모드로 전환 (Dropout 비활성화)
-        
-        speech_embeds, _ = self.encode_speech(
+        print(f"Using device: {self.device}")
+
+        model = self.unwrap_dist_model(self.model)
+        spectrogram = spectrogram.to(self.device, dtype=torch.float32)
+        if raw_wav is not None:
+            raw_wav = raw_wav.to(self.device, dtype=torch.float32)
+        if audio_padding_mask is not None:
+            audio_padding_mask = audio_padding_mask.to(self.device)
+        speech_embeds, _ = model.encode_speech(
             spectrogram, raw_wav=raw_wav, audio_padding_mask=audio_padding_mask
         )
         
         return speech_embeds 
     
     @torch.no_grad()
-    def extract_embeddings_for_dataset(model, dataloader, save_dir, dataset_name):
-        model.eval()  # 모델을 평가 모드로 전환
+    def extract_embeddings_for_dataset(self, dataloader, save_dir, dataset_name):
+        model = self.unwrap_dist_model(self.model)
+        model.eval()
+        
         os.makedirs(save_dir, exist_ok=True)
 
-        for idx, samples in enumerate(dataloader):
+        for idx, samples in enumerate(tqdm(dataloader, desc=f"Extracting {dataset_name} embeddings")):
             # 데이터 준비
             spectrogram = samples["spectrogram"]
             raw_wav = samples.get("raw_wav", None)
@@ -311,7 +319,7 @@ class Runner:
 
             # 임베딩 추출
             with torch.no_grad():
-                speech_embeds = model.extract_speech_embeddings(
+                speech_embeds = self.extract_speech_embeddings(
                     spectrogram, raw_wav=raw_wav, audio_padding_mask=audio_padding_mask
                 )
 
