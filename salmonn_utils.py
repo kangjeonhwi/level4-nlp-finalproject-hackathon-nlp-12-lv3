@@ -19,7 +19,11 @@ sys.path.append(str(Path(__file__).parent / "audiolm-trainer"))
 from models.salmonn import SALMONN
 
 def load_preprocessor(cfg):
-    salmonn_preprocessor = SALMONN.from_config(cfg.config.model)
+    if cfg.config.model.vllm:
+        from models.salmonn_vllm import SALMONN_VLLM
+        salmonn_preprocessor = SALMONN_VLLM.from_config(cfg.config.model)
+    else:
+        salmonn_preprocessor = SALMONN.from_config(cfg.config.model)
     salmonn_preprocessor.to(cfg.config.run.device)
     salmonn_preprocessor.eval()
     return salmonn_preprocessor
