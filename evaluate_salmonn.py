@@ -108,6 +108,7 @@ def main(args):
 
     # Evaluation
     testset_ids, hyps, refs = [], [], []
+    start_time = time.time()
     for samples in tqdm(dataloader):
         testset_id = samples["testset_id"]
         testset_ids.extend(testset_id)
@@ -123,9 +124,14 @@ def main(args):
             ref = samples["text"]
             refs.extend(ref)
 
+    run_time = time.time() - start_time
+    now_str = time.strftime('%Y-%m-%d %H:%M:%S')
+
     if args.make_submission:
         os.makedirs("submission_results", exist_ok=True)
-        file_name = f"submission_results/{time.strftime('%Y-%m-%d_%H-%M-%S')}_{args.mode}.csv"
+        file_name = f"submission_results/{now_str}_{args.mode}.csv"
+        with open(f"submission_results/{now_str}_{args.mode}.json", "w") as f:
+            json.dump({"run_time": run_time}, f)
     else:
         if args.task == 'asr':
             compute_wer(hyps, refs)
@@ -133,7 +139,9 @@ def main(args):
         elif args.task == 'aac':
             compute_spider(hyps, refs)
         os.makedirs("valid_results", exist_ok=True)
-        file_name = f"valid_results/{time.strftime('%Y-%m-%d_%H-%M-%S')}_{args.mode}.csv"
+        file_name = f"valid_results/{now_str}_{args.mode}.csv"
+        with open(f"valid_results/{now_str}_{args.mode}.json", "w") as f:
+            json.dump({"run_time": run_time}, f)
 
     result_df = pd.DataFrame({"testset_id": testset_ids, "text": hyps})
     result_df.to_csv(file_name, index=False)
