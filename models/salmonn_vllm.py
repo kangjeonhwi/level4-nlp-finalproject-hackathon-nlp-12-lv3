@@ -19,7 +19,7 @@ class SALMONN_VLLM(SALMONN):
         return True
 
     def _save_lora(self):
-        assert self.lora and self.llama_model is PeftModel
+        assert self.lora
         self.llama_model.save_pretrained(self.vllm_lora_path)
     
     def _is_vllm_llm_saved(self):
@@ -28,9 +28,11 @@ class SALMONN_VLLM(SALMONN):
         return True
     
     def _save_vllm_llm(self):
-        assert self.lora and self.llama_model is PeftModel
+        assert self.lora
         self.llama_model = self.llama_model.merge_and_unload()
         self.llama_model.save_pretrained(self.vllm_llm_path)
+        self.llama_tokenizer.save_pretrained(self.vllm_llm_path)
+        print(f"Save llama_model at {self.vllm_llm_path}.")
         
     def _load_vllm(self):
         if not self._is_vllm_llm_saved():
@@ -87,8 +89,6 @@ class SALMONN_VLLM(SALMONN):
                     prompt = [p.format(q) if '{}' in p else p for p, q in zip(prompt, samples["Q"]) ]
             else:
                 prompt = self.prompt_dict[samples["task"][0]]
-
-        speech_embeds, speech_atts = self.prompt_wrap(speech_embeds, speech_atts, prompt, multi_prompt=True)
 
         batch_size, query_per_sample = speech_embeds.shape[:2]
         
