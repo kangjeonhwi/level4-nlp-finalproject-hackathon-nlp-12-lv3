@@ -1,7 +1,8 @@
 import os
 import torch
 from models.salmonn import SALMONN
-from vllm import LLM, SamplingParams
+from vllm import LLM, SamplingParams, 
+from vllm.sampling_params import BeamSearchParams
 from peft import PeftModel
 
 class SALMONN_VLLM(SALMONN):
@@ -90,7 +91,7 @@ class SALMONN_VLLM(SALMONN):
 
         batch_size, query_per_sample = speech_embeds.shape[:2]
         
-        speech_embeds_viewed = speech_embeds.view((-1,) + speech_embeds.shapes[-2:])
+        speech_embeds_viewed = speech_embeds.view((-1,) + speech_embeds.shape[2:])
         num_new_tokens = speech_embeds_viewed.size(0)
         
         current_embeds = self.llama_model.get_input_embeddings()
@@ -107,21 +108,35 @@ class SALMONN_VLLM(SALMONN):
         bos = torch.ones((batch_size, 1), dtype=p_before_tokens.dtype, device=p_before_tokens.device) * self.llama_tokenizer.bos_token_id
         
         vllm_input_tokens = torch.cat([bos, p_before_tokens, query_tokens, p_after_tokens], dim=1)
-
-        sampling_params = SamplingParams(
-            max_tokens=generate_cfg.get("max_new_tokens", 200),
-            n=1,
-            beam_width=generate_cfg.get("num_beams", 4), 
-            use_beam_search=not generate_cfg.get("do_sample", False), 
-            min_tokens=generate_cfg.get("min_length", 1),
-            temperature=generate_cfg.get("temperature", 1.0),
-            top_p=generate_cfg.get("top_p", 0.9),
-            repetition_penalty=generate_cfg.get("repetition_penalty", 1.0),
-            length_penalty=generate_cfg.get("length_penalty", 1.0),
-        )
         
         llm = self._load_vllm()
-        outputs = llm.generate(vllm_input_tokens, sampling_params)
+        if generate_cfg.get("do_sample", False):
+            sampling_params = SamplingParams(
+                max_tokens=generate_cfg.get("max_new_tokens", 200),
+                n=1,
+                # best_of=generate_cfg.get("num_beams", 4), 
+                # use_beam_search=not generate_cfg.get("do_sample", False), 
+                min_tokens=generate_cfg.get("min_length", 1),
+                temperature=generate_cfg.get("temperature", 1.0),
+                top_p=generate_cfg.get("top_p", 0.9),
+                repetition_penalty=generate_cfg.get("repetition_penalty", 1.0),
+                # length_penalty=generate_cfg.get("length_penalty", 1.0),
+            )
+            
+            outputs = llm.generate(vllm_input_tokens, sampling_params)
+        else:
+            beam_search_params = BeamSearchParams(
+                max_tokens=generate_cfg.get("max_new_tokens", 200),
+                beam_width=generate_cfg.get("num_beams", 4),
+                # min_tokens=generate_cfg.get("min_length", 1),
+                temperature=generate_cfg.get("temperature", 1.0),
+                # top_p=generate_cfg.get("top_p", 0.9),
+                # repetition_penalty=generate_cfg.get("repetition_penalty", 1.0),
+                length_penalty=generate_cfg.get("length_penalty", 1.0),
+            )
+            
+            outputs = llm.beam_search(vllm_input_tokens, beam_search_params)
+            
         generated_text = outputs[0].outputs[0].text 
         
         return generated_text
