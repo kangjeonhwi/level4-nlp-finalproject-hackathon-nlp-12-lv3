@@ -103,9 +103,6 @@ def main(args):
     # Load data
     dataloader = get_dataset(cfg.config.datasets, cfg.config.run, args.task)
 
-    with open("audiolm-trainer/prompts/test_prompt.json", "r") as f:
-        test_prompt = json.load(f)
-
     # Evaluation
     testset_ids, hyps, refs = [], [], []
     start_time = time.time()
