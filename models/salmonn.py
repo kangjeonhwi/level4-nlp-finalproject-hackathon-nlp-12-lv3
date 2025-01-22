@@ -452,8 +452,9 @@ class SALMONN(nn.Module):
         stop_words_ids = [torch.tensor([2]).to(speech_embeds.device)] # TODO: fix this heuristics  
         stopping_criteria = StoppingCriteriaList([StoppingCriteriaSub(stops=stop_words_ids)])
         
-        outputs = self.llama_model.generate(
+        outputs = self.llama_model.model.generate(
             inputs_embeds=embeds,
+            pad_token_id=self.llama_model.config.eos_token_id[0],
             max_new_tokens=generate_cfg.get("max_new_tokens", 200),
             stopping_criteria=stopping_criteria,
             num_beams=generate_cfg.get("num_beams", 4),
