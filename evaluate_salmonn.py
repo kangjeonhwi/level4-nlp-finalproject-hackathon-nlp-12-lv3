@@ -111,7 +111,7 @@ def main(args):
         testset_ids.extend(testset_id)
 
         # Preprocess
-        samples = prepare_sample(samples, cuda_enabled=torch.cuda.is_available())
+        samples = prepare_sample(samples, cuda_enabled=torch.cuda.is_available(), device=cfg.config.run.device)
         generate_cfg = cfg.config.generate
         results = salmonn_preprocessor.generate(samples, generate_cfg=generate_cfg)
         hyp = [result.split(generate_cfg.end_sym)[0].lower() for result in results]
