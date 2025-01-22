@@ -83,14 +83,17 @@ def apply_to_sample(f, sample):
     return _apply(sample)
 
 
-def move_to_cuda(sample, device):
+def move_to_cuda(sample, device=None):
     def _move_to_cuda(tensor):
-        return tensor.cuda(torch.device(device))
+        if device:
+            return tensor.cuda(torch.device(device))
+        else:
+            return tensor.cuda()
 
     return apply_to_sample(_move_to_cuda, sample)
 
 
-def prepare_sample(samples, cuda_enabled=True, device="cuda:0"):
+def prepare_sample(samples, cuda_enabled=True, device=None):
     if cuda_enabled:
         samples = move_to_cuda(samples, device)
 
