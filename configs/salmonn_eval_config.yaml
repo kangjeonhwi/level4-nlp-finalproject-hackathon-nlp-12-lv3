@@ -43,6 +43,11 @@ model:
   lora_alpha: 32
   lora_dropout: 0.1
 
+  # vLLM for fast decoding
+  vllm: False
+  vllm_lora_path: ""
+  vllm_llm_path: ""
+
   multi_prompt: True
   prompt_template: "USER: {}\nASSISTANT:"
   prompt_path: "audiolm-trainer/prompts/train_prompt.json"
