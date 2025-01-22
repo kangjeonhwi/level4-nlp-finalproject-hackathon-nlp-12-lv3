@@ -1,7 +1,7 @@
 import os
 import torch
 from models.salmonn import SALMONN
-from vllm import LLM, SamplingParams, 
+from vllm import LLM, SamplingParams
 from vllm.sampling_params import BeamSearchParams
 from peft import PeftModel
 
