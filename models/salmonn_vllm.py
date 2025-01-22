@@ -11,6 +11,7 @@ class SALMONN_VLLM(SALMONN):
         self.vllm_lora_path = vllm_lora_path
         self.vllm_llm_path = vllm_llm_path
         self.llama_vocab_size = self.llama_model.config.vocab_size
+        self.llm = None
     
     def _is_lora_saved(self):
         if not os.path.exists(self.vllm_lora_path):
@@ -35,7 +36,7 @@ class SALMONN_VLLM(SALMONN):
         if not self._is_vllm_llm_saved():
             self._save_vllm_llm()
         
-        return LLM(
+        self.llm = LLM(
             model = self.vllm_llm_path,
         )
     
@@ -109,7 +110,9 @@ class SALMONN_VLLM(SALMONN):
         
         vllm_input_tokens = torch.cat([bos, p_before_tokens, query_tokens, p_after_tokens], dim=1)
         
-        llm = self._load_vllm()
+        if self.llm is None:
+            self._load_vllm()
+        
         if generate_cfg.get("do_sample", False):
             sampling_params = SamplingParams(
                 max_tokens=generate_cfg.get("max_new_tokens", 200),
@@ -123,7 +126,7 @@ class SALMONN_VLLM(SALMONN):
                 # length_penalty=generate_cfg.get("length_penalty", 1.0),
             )
             
-            outputs = llm.generate(vllm_input_tokens, sampling_params)
+            outputs = self.llm.generate(vllm_input_tokens, sampling_params)
         else:
             beam_search_params = BeamSearchParams(
                 max_tokens=generate_cfg.get("max_new_tokens", 200),
@@ -135,7 +138,7 @@ class SALMONN_VLLM(SALMONN):
                 length_penalty=generate_cfg.get("length_penalty", 1.0),
             )
             
-            outputs = llm.beam_search(vllm_input_tokens, beam_search_params)
+            outputs = self.llm.beam_search(vllm_input_tokens, beam_search_params)
             
         generated_text = outputs[0].outputs[0].text 
         
