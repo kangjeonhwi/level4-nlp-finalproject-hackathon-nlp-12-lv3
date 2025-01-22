@@ -83,16 +83,16 @@ def apply_to_sample(f, sample):
     return _apply(sample)
 
 
-def move_to_cuda(sample):
+def move_to_cuda(sample, device):
     def _move_to_cuda(tensor):
-        return tensor.cuda()
+        return tensor.cuda(torch.device(device))
 
     return apply_to_sample(_move_to_cuda, sample)
 
 
-def prepare_sample(samples, cuda_enabled=True):
+def prepare_sample(samples, cuda_enabled=True, device="cuda:0"):
     if cuda_enabled:
-        samples = move_to_cuda(samples)
+        samples = move_to_cuda(samples, device)
 
     # TODO fp16 support
 
