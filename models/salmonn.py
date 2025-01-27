@@ -374,7 +374,7 @@ class SALMONN(nn.Module):
             if self.multi_prompt:
                 prompt = [random.choice(self.prompt_dict[task]) for task in samples["task"]]
                 if "Q" in samples:
-                    prompt = [p.format(q) if '{}' in p else p for p, q in zip(prompt, samples["Q"]) ]
+                    prompt = [p.format(q) if '{}' in p else p for p, q in zip(prompt, samples["Q"])]
             else:
                 prompt = random.choice(self.prompt_dict[samples["task"][0]])
 
@@ -423,7 +423,7 @@ class SALMONN(nn.Module):
         inputs_embeds = torch.cat([bos_embeds, speech_embeds, to_regress_embeds], dim=1)
         attention_mask = torch.cat([atts_bos, speech_atts, to_regress_tokens.attention_mask], dim=1)
 
-        # calulate loss
+        # calculate loss
         with self.maybe_autocast():
             outputs = self.llama_model(
                 inputs_embeds=inputs_embeds,
@@ -436,13 +436,22 @@ class SALMONN(nn.Module):
         if verbose:
             nvocab = self.llama_model.config.vocab_size
             results = outputs.logits[:, empty_targets.size(1) - 1: -1, :].contiguous().view(-1, nvocab).argmax(dim=-1)
-            labels = targets[:, empty_targets.size(1):].contiguous().view(-1)
-            mask = (labels != -100)
-            correct = (results[mask] == labels[mask]).float().sum()
-            total = len(labels[mask])
+            decoded_preds = self.llama_tokenizer.batch_decode(
+                results.view(batch_size, -1), skip_special_tokens=True
+            )
+            labels = targets[:, empty_targets.size(1):].contiguous().view(batch_size, -1)
+            decoded_targets = [
+                self.llama_tokenizer.decode(label[label != -100], skip_special_tokens=True)
+                for label in labels
+            ]
 
-        if verbose:
-            return {"loss": loss, "correct": correct, "total": total}
+            return {
+                "loss": loss,
+                "correct": (results.view(-1)[mask] == labels.view(-1)[mask]).float().sum(),
+                "total": len(labels.view(-1)[mask]),
+                "decoded_preds": decoded_preds,
+                "decoded_targets": decoded_targets,
+            }
 
         return {"loss": loss}
 
