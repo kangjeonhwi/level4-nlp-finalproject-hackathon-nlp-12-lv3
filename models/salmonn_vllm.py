@@ -126,7 +126,7 @@ class SALMONN_VLLM(SALMONN):
                 # length_penalty=generate_cfg.get("length_penalty", 1.0),
             )
             
-            outputs = self.llm.generate(vllm_input_tokens, sampling_params)
+            outputs = self.llm.generate(prompt_token_ids=vllm_input_tokens, sampling_params=sampling_params)
         else:
             beam_search_params = BeamSearchParams(
                 max_tokens=generate_cfg.get("max_new_tokens", 200),
@@ -138,7 +138,7 @@ class SALMONN_VLLM(SALMONN):
                 length_penalty=generate_cfg.get("length_penalty", 1.0),
             )
             
-            outputs = self.llm.beam_search(vllm_input_tokens, beam_search_params)
+            outputs = self.llm.beam_search(vllm_input_tokens, params=beam_search_params)
             
         generated_text = outputs[0].outputs[0].text 
         
