@@ -11,3 +11,4 @@ __pycache__
 *.pt
 *.pth
 BEATs
+/ria/Relative-importance-and-activation-pruning/lib/__pycache__
