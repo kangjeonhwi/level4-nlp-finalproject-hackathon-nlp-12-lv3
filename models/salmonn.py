@@ -29,6 +29,7 @@ from .modeling_whisper import WhisperModel
 from .beats.BEATs import BEATsConfig, BEATs
 from .utils import StoppingCriteriaSub
 
+# from unsloth import FastLanguageModel
 
 class SALMONN(nn.Module):
     @classmethod
@@ -106,6 +107,44 @@ class SALMONN(nn.Module):
         self.max_txt_len = max_txt_len
         self.end_sym = end_sym
         self.low_resource = low_resource
+###########################################Unsloth####################
+        # logging.info('Loading Unsloth LLaMA Model & Tokenizer')
+        # self.llama_model, self.llama_tokenizer = FastLanguageModel.from_pretrained(
+        #     model_name = "unsloth/Llama-3.2-1B-Instruct", # or choose "unsloth/Llama-3.2-1B-Instruct"
+        #     max_seq_length = 128000,
+        #     dtype = None,
+        #     load_in_4bit = True,
+        #     device_map = "auto",
+        # )
+        # self.llama_tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+        # self.llama_tokenizer.padding_side = "right"
+        
+        # self.llama_model.resize_token_embeddings(len(self.llama_tokenizer))
+        # for name, param in self.llama_model.named_parameters():
+        #     param.requires_grad = False
+        # logging.info('Loading LLaMA Done')
+
+        # if self.lora:
+        #     self.llama_model = FastLanguageModel.get_peft_model(
+        #         self.llama_model,
+        #         #task_type=TaskType.CAUSAL_LM, 
+        #         inference_mode=False, 
+        #         r = lora_rank, # Choose any number > 0 ! Suggested 8, 16, 32, 64, 128
+        #         target_modules = ["q_proj", "v_proj"],
+        #         # ["q_proj", "k_proj", "v_proj", "o_proj",
+        #         #                 "gate_proj", "up_proj", "down_proj",],
+        #         lora_alpha = lora_alpha,
+        #         lora_dropout = lora_dropout, # Supports any, but = 0 is optimized
+        #         bias = "none",    # Supports any, but = "none" is optimized
+        #         # [NEW] "unsloth" uses 30% less VRAM, fits 2x larger batch sizes!
+        #         use_gradient_checkpointing = "unsloth", # True or "unsloth" for very long context
+        #         random_state = 3407,
+        #         use_rslora = False,  # We support rank stabilized LoRA
+        #         loftq_config = None, # And LoftQ
+        #     )
+        #     self.llama_model.print_trainable_parameters()
+        #     logging.info('LoRA Training')
+###########################Original##############
 
         logging.info('Loading LLaMA Tokenizer')
         self.llama_tokenizer = AutoTokenizer.from_pretrained(llama_path, use_fast=False, token=token)
@@ -145,7 +184,7 @@ class SALMONN(nn.Module):
                 self.llama_model = get_peft_model(self.llama_model, self.peft_config)
                 self.llama_model.print_trainable_parameters()
                 logging.info('LoRA Training')
-
+##############################
         assert whisper_path
         logging.info('Loading Whisper Model')
         self.speech_encoder = WhisperModel.from_pretrained(whisper_path).encoder
