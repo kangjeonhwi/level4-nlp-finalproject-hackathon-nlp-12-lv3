@@ -21,11 +21,16 @@ from omegaconf import OmegaConf
 class Config:
     def __init__(self, args):
         self.config = {}
-
         self.args = args
-        user_config = self._build_opt_list(self.args.options)
+
+        # 설정 파일 로드
         config = OmegaConf.load(self.args.cfg_path)
-        config = OmegaConf.merge(config, user_config)
+
+        # options 속성이 있는 경우에만 병합 처리
+        if hasattr(self.args, 'options') and self.args.options:  
+            user_config = self._build_opt_list(self.args.options)
+            config = OmegaConf.merge(config, user_config)
+
         self.config = config
 
     def _convert_to_dot_list(self, opts):
