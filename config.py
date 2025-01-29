@@ -62,3 +62,16 @@ class Config:
 
     def to_dict(self):
         return OmegaConf.to_container(self.config)
+
+    def notebook_print(self) :
+        """
+        jupyter notebook에는 logging이 표시되지 않아 Experiment 환경에서 Config class를 확인하기 위한 함수.
+        """
+        print("\n=====  Running Parameters    =====")
+        print(self._convert_node_to_json(self.config.run))
+
+        print("\n======  Dataset Attributes  ======")
+        print(self._convert_node_to_json(self.config.datasets))
+
+        print(f"\n======  Model Attributes  ======")
+        print(self._convert_node_to_json(self.config.model))
