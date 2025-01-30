@@ -142,13 +142,13 @@ class Runner:
                 metric_logger.update(loss=loss.item())
                 metric_logger.update(lr=self.optimizer.param_groups[0]["lr"])
                 
-                global_rank = int(os.environ["RANK"])
+                global_rank = int(os.environ.get("RANK", 0))
                 if global_rank == 0:
                     wandb.log({"train/iteration": i, "train/loss": loss.item(), "train/lr": self.optimizer.param_groups[0]["lr"]})
             else: # dryrun, no model availble
                 metric_logger.update(loss=0.0)
                 metric_logger.update(lr=0.0)
-                global_rank = int(os.environ["RANK"])
+                global_rank = global_rank = int(os.environ.get("RANK", 0))
                 if global_rank == 0:
                     wandb.log({"train/iteration": i, "train/loss": 0.0, "train/lr": 0.0})
 

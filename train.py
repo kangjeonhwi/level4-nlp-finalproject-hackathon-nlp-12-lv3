@@ -71,8 +71,8 @@ def main():
     setup_seeds(run_config)
     setup_logger() # set after init_distributed_mode() to only log on master.
 
-    # Wandb logger
-    global_rank = int(os.environ["RANK"])
+    # Wandb logger        
+    global_rank = int(os.environ.get("RANK", 0))
     if global_rank == 0:
         wandb.login()
         wandb.init(project="audio_lm", name=run_config.exp_name)
