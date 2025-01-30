@@ -1,4 +1,4 @@
-OUTPUT_PATH = "./merged"  # folder to store the result in
+OUTPUT_PATH = "./merge_list"  # folder to store the result in
 LORA_MERGE_CACHE = "/tmp"  # change if you want to keep these for some reason
 CONFIG_YML = "./slice.yaml"  # merge configuration file
 COPY_TOKENIZER = True  # you want a tokenizer? yeah, that's what i thought
