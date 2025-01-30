@@ -20,7 +20,7 @@ run_merge(
     out_path=OUTPUT_PATH,
     options=MergeOptions(
         lora_merge_cache=LORA_MERGE_CACHE,
-        cuda=torch.cuda.is_available(),
+        # cuda=torch.cuda.is_available(),
         copy_tokenizer=COPY_TOKENIZER,
         lazy_unpickle=LAZY_UNPICKLE,
         low_cpu_memory=LOW_CPU_MEMORY,

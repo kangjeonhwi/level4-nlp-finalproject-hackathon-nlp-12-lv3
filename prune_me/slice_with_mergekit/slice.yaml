@@ -1,10 +1,10 @@
 slices:
   - sources:
-      - model: mistralai/Mistral-7B-Instruct-v0.2
-        layer_range: [0, 21]
+      - model: meta-llama/Llama-3.2-3B-Instruct
+        layer_range: [19,27]
   - sources:
-      - model: mistralai/Mistral-7B-Instruct-v0.2
-        layer_range: [29,32]
+      - model: meta-llama/Llama-3.2-3B-Instruct
+        layer_range: [20,28]
             
 merge_method: passthrough
 dtype: bfloat16
