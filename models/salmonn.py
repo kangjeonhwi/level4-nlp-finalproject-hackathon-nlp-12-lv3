@@ -20,9 +20,8 @@ import random
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from transformers import StoppingCriteriaList, AutoTokenizer, AutoModelForCausalLM, AutoConfig
-from peft import LoraConfig, TaskType, get_peft_model
-
+from transformers import StoppingCriteriaList, AutoTokenizer, AutoModelForCausalLM, AutoConfig, BitsAndBytesConfig
+from peft import LoraConfig, TaskType, get_peft_model, prepare_model_for_kbit_training
 from .Qformer import BertConfig, BertLMHeadModel
 from .modeling_llama import LlamaForCausalLM
 from .modeling_whisper import WhisperModel
@@ -83,6 +82,7 @@ class SALMONN(nn.Module):
         lora_rank=8,
         lora_alpha=32,
         lora_dropout=0.1,
+        qlora = False,
 
         multi_prompt=False,
         prompt_path="",
@@ -102,6 +102,7 @@ class SALMONN(nn.Module):
         self.second_per_window = second_per_window
         self.second_stride = second_stride
         self.lora = lora
+        self.qlora = qlora
         self.multi_prompt = multi_prompt
         self.max_txt_len = max_txt_len
         self.end_sym = end_sym
@@ -135,14 +136,30 @@ class SALMONN(nn.Module):
             logging.info('Loading LLaMA Done')
 
             if self.lora:
-                self.peft_config = LoraConfig(
-                    task_type=TaskType.CAUSAL_LM, 
-                    inference_mode=False, 
-                    r=lora_rank, 
-                    lora_alpha=lora_alpha, 
-                    lora_dropout=lora_dropout,
-                    target_modules=["q_proj", "v_proj"]
-                )
+                if self.qlora : 
+                    self.peft_config = LoraConfig(
+                        r=lora_rank,
+                        lora_alpha=lora_alpha,
+                        lora_dropout=lora_dropout,
+                        target_modules=["q_proj", "v_proj"],
+                        task_type="CAUSAL_LM",
+                        use_dora=True, # DORA 적용
+                        init_lora_weights="loftq",  # LoftQ 초기화 필수
+                        modules_to_save=["lm_head"]  # 출력 레이어 보존
+                    )
+                    self.llama_model = prepare_model_for_kbit_training(
+                        self.llama_model,
+                        use_gradient_checkpointing=True  # 메모리 절약
+                    )
+                else : 
+                    self.peft_config = LoraConfig(
+                        task_type=TaskType.CAUSAL_LM, 
+                        inference_mode=False, 
+                        r=lora_rank, 
+                        lora_alpha=lora_alpha, 
+                        lora_dropout=lora_dropout,
+                        target_modules=["q_proj", "v_proj"],
+                    )
                 self.llama_model = get_peft_model(self.llama_model, self.peft_config)
                 self.llama_model.print_trainable_parameters()
                 logging.info('LoRA Training')
