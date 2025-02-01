@@ -17,6 +17,8 @@ from dist_utils import main_process, is_dist_avail_and_initialized, is_main_proc
 from logger import MetricLogger, SmoothedValue
 from utils import get_dataloader, prepare_sample
 from optims import get_optimizer, LinearWarmupCosineLRScheduler
+from metrics import compute_wer, compute_spider
+from custom_metrics import compute_per, compute_f1
 
 
 class Runner:
@@ -187,6 +189,7 @@ class Runner:
                     "loss": loss.item(),
                     "acc": (correct / total).item(),
                     "total": total,
+                    "task": samples["task"],  # task 정보 추가
                 }
             else:
                 res = {
@@ -195,6 +198,7 @@ class Runner:
                     "loss": 0.0,
                     "acc": 0.0,
                     "total": 1,
+                    "task": samples["task"],  # task 정보 추가
                 }
 
             if decode:
@@ -211,7 +215,6 @@ class Runner:
                 text = model.generate(samples, self.config.config.run, prompts=prompts)
                 res["text"] = text
                 res["prompt"] = prompts
-                res["task"] = samples["task"]
 
             results.append(res)
 
@@ -221,14 +224,27 @@ class Runner:
         if save_json:
             self.save_result(results, self.output_dir, "eval_{}_epoch_{}".format(split, epoch))
 
+        # 기존 메트릭 계산 (loss, agg_metrics)
         res = {
             "loss": torch.tensor(0).float().cuda(),
             "n_sample": torch.tensor(0).float().cuda(),
             "correct": torch.tensor(0).float().cuda(),
             "n_token": torch.tensor(0).float().cuda(),
         }
-        
+
+        # Task별 메트릭 계산을 위한 초기화
+        task_metrics = {
+            "asr": {"wer": 0.0, "n_sample": 0},
+            "audiocaption": {"spider": 0.0, "n_sample": 0},
+            "QA": {"f1": 0.0, "n_sample": 0},
+            "phone_recognition": {"per": 0.0, "n_sample": 0},
+            "audiocaption_v2": {"spider": 0.0, "n_sample": 0},
+            "gender_recognition": {"accuracy": 0.0, "n_sample": 0},
+        }
+
+        # 각 샘플에 대해 기존 메트릭 및 task별 메트릭 계산
         for item in results:
+            # 기존 메트릭 계산
             item_loss = item["loss"]
             item_n_sample = len(item["id"])
             item_correct = item["acc"] * item["total"]
@@ -238,15 +254,60 @@ class Runner:
             res["correct"] += item_correct
             res["n_token"] += item_n_token
 
+            # Task별 메트릭 계산
+            task = item["task"]
+            if task in task_metrics:
+                if task == "asr":
+                    wer = compute_wer(item["text"], item["ground_truth"])
+                    task_metrics[task]["wer"] += wer * len(item["id"])
+                    task_metrics[task]["n_sample"] += len(item["id"])
+                elif task == "audiocaption" or task == "audiocaption_v2":
+                    spider = compute_spider(item["text"], item["ground_truth"])
+                    task_metrics[task]["spider"] += spider * len(item["id"])
+                    task_metrics[task]["n_sample"] += len(item["id"])
+                elif task == "QA":
+                    f1 = compute_f1(item["text"], item["ground_truth"])
+                    task_metrics[task]["f1"] += f1 * len(item["id"])
+                    task_metrics[task]["n_sample"] += len(item["id"])
+                elif task == "phone_recognition":
+                    per = compute_per(item["text"], item["ground_truth"])
+                    task_metrics[task]["per"] += per * len(item["id"])
+                    task_metrics[task]["n_sample"] += len(item["id"])
+                elif task == "gender_recognition":
+                    accuracy = item["acc"]  # Accuracy는 이미 계산됨
+                    task_metrics[task]["accuracy"] += accuracy * len(item["id"])
+                    task_metrics[task]["n_sample"] += len(item["id"])
+
+        # 분산 환경에서 모든 프로세스의 결과 합산
         if is_dist_avail_and_initialized():
             dist.all_reduce(res["loss"])
             dist.all_reduce(res["n_sample"])
             dist.all_reduce(res["correct"])
             dist.all_reduce(res["n_token"])
 
+            for task, metrics in task_metrics.items():
+                for metric_name, value in metrics.items():
+                    if isinstance(value, torch.Tensor):
+                        dist.all_reduce(value)
+
+        # 기존 메트릭 계산
         ret = {"loss": 0, "agg_metrics": 0}
         ret["loss"] = (res["loss"] / res["n_sample"]).item()
         ret["agg_metrics"] = (res["correct"] / res["n_token"]).item()
+
+        # Task별 평균 메트릭 계산
+        for task, metrics in task_metrics.items():
+            if metrics["n_sample"] > 0:
+                if task == "asr":
+                    ret[f"{task}_wer"] = metrics["wer"] / metrics["n_sample"]
+                elif task == "audiocaption" or task == "audiocaption_v2":
+                    ret[f"{task}_spider"] = metrics["spider"] / metrics["n_sample"]
+                elif task == "QA":
+                    ret[f"{task}_f1"] = metrics["f1"] / metrics["n_sample"]
+                elif task == "phone_recognition":
+                    ret[f"{task}_per"] = metrics["per"] / metrics["n_sample"]
+                elif task == "gender_recognition":
+                    ret[f"{task}_accuracy"] = metrics["accuracy"] / metrics["n_sample"]
 
         return ret
 
