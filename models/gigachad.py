@@ -466,6 +466,9 @@ class GIGACHAD(nn.Module):
         window_level_Qformer = config.get("window_level_Qformer", True)
         second_per_window = config.get("second_per_window", 0.333333)
         second_stride = config.get("second_stride", 0.333333)
+        
+        use_at_model = config.get("use_at_model", True)
+        freeze_at_model = config.get("freeze_at_model", False)
 
         speech_llama_proj_model = config.get("speech_llama_proj_model", "")
         freeze_speech_llama_proj = config.get("freeze_speech_llama_proj", False)
@@ -501,6 +504,8 @@ class GIGACHAD(nn.Module):
             n_layer=n_layer,
             rep_dim=rep_dim,
             tltr_mode=tltr_mode,
+            use_at_model=use_at_model,
+            freeze_at_model=freeze_at_model,
             second_per_window=second_per_window,
             second_stride=second_stride,
             speech_llama_proj_model=speech_llama_proj_model,
