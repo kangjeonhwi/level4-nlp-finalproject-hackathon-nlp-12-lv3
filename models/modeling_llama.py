@@ -120,7 +120,7 @@ class ResidualAttentionBlock(nn.Module):
         x = x + self.mlp(self.mlp_ln(x))
         return x
 
-# model related to audio tagging
+# model related to audio tagging# model related to audio tagging
 class ATModel(nn.Module):
     def __init__(self, n_layer=32, rep_dim=1280, mode='tl_down_tr_512_1_8'):
         super().__init__()
@@ -131,34 +131,21 @@ class ATModel(nn.Module):
         self.num_latt_head = 8
         self.time_tr = ResidualAttentionBlock(self.rep_dim, self.num_tatt_head)
         self.layer_tr = ResidualAttentionBlock(self.rep_dim, self.num_latt_head)
-        
-        # 레이어 인덱스에 따른 가중치 초기화 (초기 레이어일수록 높은 값)
-        self.layer_weights = nn.Parameter(torch.linspace(start=1.0, end=0.1, steps=n_layer)) 
-        self.softmax = nn.Softmax(dim=0)  # 가중치 정규화
 
     def forward(self, audio_rep, time_resolution=10):
         # time resolution in seconds
         # input audio_rep in shape (B, #layer, #time steps, rep_dim), e.g., (B, 32, 25, 1280) # for 30 seconds, 25 = 500 / 20 (downsampling)
         B, num_layer, audio_len, rep_dim = audio_rep.shape[0], audio_rep.shape[1], audio_rep.shape[2], audio_rep.shape[3]
-        
-        # 시간 축 처리
         audio_rep = audio_rep.reshape([B * num_layer, audio_len, rep_dim])  # [B*32, 25, 1280]
         audio_rep = self.time_tr(audio_rep)  # [B*32, 25, 1280]
         audio_rep = audio_rep.reshape([B, num_layer, audio_len, rep_dim]) # [B, 32, 25, 1280]
         audio_rep = audio_rep.permute([0, 2, 1, 3]) # [B, 25, 32, 1280]
         audio_rep = audio_rep.reshape([B * audio_len, num_layer, rep_dim]) # [B*25, 32, 1280]
-        
-        # 레이어 가중치 적용
-        normalized_weights = self.softmax(self.layer_weights)  # [L] → 합=1
-        weighted_audio = audio_rep * normalized_weights.unsqueeze(-1)  # [B*T, L, D] * [L, 1]
-        
-        # 레이어 축 처리
-        audio_rep = self.layer_tr(weighted_audio)
-        
-        # 가중 평균 풀링
-        audio_rep = torch.sum(audio_rep, dim=1)  # [B*T, D]
+        audio_rep = self.layer_tr(audio_rep)  # [B*25, 32, 1280]
+        audio_rep = torch.mean(audio_rep, dim=1)  # [B*25, 1280]
         audio_rep = audio_rep.reshape([B, audio_len, rep_dim])
         return audio_rep
+    
     
 # Copied from transformers.models.bart.modeling_bart._make_causal_mask
 def _make_causal_mask(
