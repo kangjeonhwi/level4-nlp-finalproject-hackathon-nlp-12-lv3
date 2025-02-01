@@ -17,11 +17,17 @@ import os
 
 # Custom modules
 from models.salmonn import SALMONN
+from models.salmonn_pooling import SALMONNPooling
 
 def load_preprocessor(cfg):
-    salmonn_preprocessor = SALMONN.from_config(cfg.config.model)
-    salmonn_preprocessor.to(cfg.config.run.device)
-    salmonn_preprocessor.eval()
+    if cfg.config.model.get("use_feature_extraction", False):
+        salmonn_preprocessor = SALMONNPooling.from_config(cfg.config.model)
+        salmonn_preprocessor.to(cfg.config.run.device)
+        salmonn_preprocessor.eval()
+    else:
+        salmonn_preprocessor = SALMONN.from_config(cfg.config.model)
+        salmonn_preprocessor.to(cfg.config.run.device)
+        salmonn_preprocessor.eval()
     return salmonn_preprocessor
 
 
