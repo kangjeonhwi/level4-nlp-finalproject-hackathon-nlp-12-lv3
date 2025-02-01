@@ -20,7 +20,7 @@ from models.salmonn import SALMONN
 from models.salmonn_pooling import SALMONNPooling
 
 def load_preprocessor(cfg):
-    if cfg.config.model.get("use_feature_extraction", False):
+    if cfg.config.model.get("use_average_pooling", False):
         salmonn_preprocessor = SALMONNPooling.from_config(cfg.config.model)
         salmonn_preprocessor.to(cfg.config.run.device)
         salmonn_preprocessor.eval()
