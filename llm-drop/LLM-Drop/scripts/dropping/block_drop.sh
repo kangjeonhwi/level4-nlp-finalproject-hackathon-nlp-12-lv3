@@ -11,8 +11,8 @@ prune_method="block_drop"
 block_drop_method="discrete"
 drop_n=8
 
-model_name=mistral-base
-model_name_or_path=mistralai/Mistral-7B-v0.1
+model_name=deepseek-r1
+model_name_or_path="/data/home/psj/level4-nlp-finalproject-hackathon-nlp-12-lv3/llm-drop/LLM-Drop/deepseek-r1-1.5b"
 
 folder_name="${model_name}-${prune_method}-${block_drop_method}-drop${drop_n}"
 similarity_cache_file="../results_prune/cache/${model_name}-${prune_method}-${dataset}-${n_calibration_samples}samples.pt"

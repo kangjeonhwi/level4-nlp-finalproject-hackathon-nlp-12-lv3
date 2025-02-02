@@ -61,7 +61,13 @@ def get_block_similarities(model, dataloader: DataLoader, accelerator: Accelerat
             # Get states
             handle = layer.register_forward_hook(record_states_hook)
             for j in range(num_samples):
-                outputs[j] = layer(inputs[j], attention_mask=attention_mask[j], position_ids=position_ids[j])[0]
+                print(f"position_ids[j]: {position_ids[j]}")
+                print(f"position_ids[j] shape: {position_ids[j].shape if position_ids[j] is not None else 'None'}")
+                print(f"attention_mask[j]: {attention_mask[j]}")
+                # if hasattr(layer, "position_embeddings") and layer.position_embeddings is not None:
+                #     outputs[j] = layer(inputs[j], attention_mask=attention_mask[j], position_ids=position_ids[j])[0]
+                # else:
+                outputs[j] = layer(inputs[j], attention_mask=attention_mask[j])[0]
             handle.remove()
 
             # Update inputs & outputs

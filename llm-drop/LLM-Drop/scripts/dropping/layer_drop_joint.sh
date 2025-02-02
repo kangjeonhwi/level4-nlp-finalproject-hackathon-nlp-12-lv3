@@ -7,13 +7,13 @@ prune_data_type="pt"
 n_calibration_samples=256
 seq_len=2048
 
-prune_method="layer_drop"
+prune_method="block_drop"
 layer_drop_method="discrete"
 target_layer="all"
 drop_n=64
 
-model_name=llama2-13b-base
-model_name_or_path=mistralai/Mistral-7B-v0.1
+model_name=deepSeek-r1-distill-qwen-1.5b
+model_name_or_path=deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B
 
 folder_name="${model_name}-${prune_method}_${target_layer}-${layer_drop_method}-drop${drop_n}"
 similarity_cache_file="../results_prune/cache/${model_name}-${prune_method}_${target_layer}-${dataset}-${n_calibration_samples}samples.pt"
