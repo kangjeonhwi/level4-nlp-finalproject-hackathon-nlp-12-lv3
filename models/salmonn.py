@@ -20,6 +20,8 @@ import random
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.distributed as dist
+# from unsloth import FastLanguageModel
 from transformers import StoppingCriteriaList, AutoTokenizer, AutoModelForCausalLM, AutoConfig, BitsAndBytesConfig
 from peft import LoraConfig, TaskType, get_peft_model, prepare_model_for_kbit_training
 from .Qformer import BertConfig, BertLMHeadModel
@@ -82,15 +84,16 @@ class SALMONN(nn.Module):
         lora_rank=8,
         lora_alpha=32,
         lora_dropout=0.1,
-        qlora = False,
 
         multi_prompt=False,
         prompt_path="",
         prompt_template="",
         max_txt_len=128,
         end_sym="</s>",
-        low_resource=False,  # use 8 bit
-        device_8bit=0,  # the device of 8bit model should be set when loading and cannot be changed anymore.
+        pre_quant = False,
+        quant_8bit = False,
+        quant_4bit = False,
+        device_quant=0,  # the device of 8bit model should be set when loading and cannot be changed anymore.
         token=None,
         only_preprocessor=None,
     ):
@@ -102,42 +105,76 @@ class SALMONN(nn.Module):
         self.second_per_window = second_per_window
         self.second_stride = second_stride
         self.lora = lora
-        self.qlora = qlora
         self.multi_prompt = multi_prompt
         self.max_txt_len = max_txt_len
         self.end_sym = end_sym
-        self.low_resource = low_resource
+        self.quant_8bit = quant_8bit
+        self.quant_4bit = quant_4bit
+        self.device_quant = device_quant
 
         logging.info('Loading LLaMA Tokenizer')
         self.llama_tokenizer = AutoTokenizer.from_pretrained(llama_path, use_fast=False, token=token)
         self.llama_tokenizer.add_special_tokens({'pad_token': '[PAD]'})
         self.llama_tokenizer.padding_side = "right"
 
+        self.quant_4bit = True
+        device_quant = 0
+
         if not only_preprocessor:
             logging.info('Loading LLaMA Model')
-            if self.low_resource:
+            post_quant = False
+            if self.quant_4bit or self.quant_8bit: post_quant = True
+            if post_quant==True:
+                if self.quant_4bit:
+                    bnb_config = BitsAndBytesConfig(
+                        load_in_4bit=True,
+                        bnb_4bit_quant_type="nf4",
+                        bnb_4bit_use_double_quant=True,
+                        bnb_4bit_compute_dtype=torch.bfloat16,
+                        llm_int8_skip_modules=["embed_tokens", "lm_head"]  # 임베딩/헤드 레이어 양자화 제외
+                    )
+
+                    with torch.device('cuda') :
+                        self.llama_model = AutoModelForCausalLM.from_pretrained(
+                            llama_path,
+                            quantization_config=bnb_config,
+                            token=token,
+                        )
+
+                    
+                else :
+                    bnb_config = BitsAndBytesConfig(
+                        load_in_8bit=True,                    
+                        llm_int8_threshold=6.0,               
+                        llm_int8_has_fp16_weight=True,       
+                        llm_int8_skip_modules=None,           
+                        llm_int8_enable_fp32_cpu_offload=False
+                    )
+                    self.llama_model = AutoModelForCausalLM.from_pretrained(
+                        llama_path,
+                        quantization_config=bnb_config,
+                        device_map={"": device_quant},
+                        token=token,
+                    )
+            else :
                 self.llama_model = AutoModelForCausalLM.from_pretrained(
                     llama_path,
                     torch_dtype=torch.float16,
-                    load_in_8bit=True,
-                    device_map={"": device_8bit},
-                    token=token,
-                )
-            else:
-                self.llama_model = AutoModelForCausalLM.from_pretrained(
-                    llama_path,
-                    torch_dtype=torch.float16,
+                    # device_map = "auto", 
+                    # mixed_precision=True, /// transformers 버전에 따라 지정필요요 
                     token=token,
                 )
 
+
             self.llama_model.resize_token_embeddings(len(self.llama_tokenizer))
+            
             for name, param in self.llama_model.named_parameters():
                 param.requires_grad = False
             logging.info('Loading LLaMA Done')
 
             if self.lora:
-                if self.qlora : 
-                    self.peft_config = LoraConfig(
+                if self.quant_4bit : 
+                    """self.peft_config = LoraConfig(
                         r=lora_rank,
                         lora_alpha=lora_alpha,
                         lora_dropout=lora_dropout,
@@ -146,22 +183,44 @@ class SALMONN(nn.Module):
                         use_dora=True, # DORA 적용
                         init_lora_weights="loftq",  # LoftQ 초기화 필수
                         modules_to_save=["lm_head"]  # 출력 레이어 보존
-                    )
-                    self.llama_model = prepare_model_for_kbit_training(
-                        self.llama_model,
-                        use_gradient_checkpointing=True  # 메모리 절약
-                    )
-                else : 
-                    self.peft_config = LoraConfig(
-                        task_type=TaskType.CAUSAL_LM, 
-                        inference_mode=False, 
-                        r=lora_rank, 
-                        lora_alpha=lora_alpha, 
-                        lora_dropout=lora_dropout,
-                        target_modules=["q_proj", "v_proj"],
-                    )
+                    )"""
+                    self.llama_model = prepare_model_for_kbit_training(self.llama_model)
+
+                self.peft_config = LoraConfig(
+                    task_type=TaskType.CAUSAL_LM, 
+                    inference_mode=False, 
+                    r=lora_rank, 
+                    lora_alpha=lora_alpha, 
+                    lora_dropout=lora_dropout,
+                    target_modules=["q_proj", "v_proj"],
+                )
+                
+
+                
                 self.llama_model = get_peft_model(self.llama_model, self.peft_config)
                 self.llama_model.print_trainable_parameters()
+                quantization_info = {
+                    param_name: (param.dtype, param.__class__.__name__) 
+                    for param_name, param in self.llama_model.named_parameters()
+                    if "proj" in param_name  # 주요 타겟 모듈 샘플링
+                }
+
+                logging.info("==== 4-bit Quantization Validation ====")
+                for name, (dtype, cls) in quantization_info.items():
+                    logging.info(f"{name}: {dtype} | {cls}")
+
+                lora_params = [
+                    (name, param.shape, param.requires_grad)
+                    for name, param in self.llama_model.named_parameters()
+                    if "lora" in name
+                ]
+
+                logging.info("\n==== LoRA Parameter Validation ====")
+                if not lora_params:
+                    logging.info("❌ LoRA not detected!")
+                else:
+                    for name, shape, grad in lora_params:
+                        logging.info(f"{name}: {shape} | Trainable: {grad}")
                 logging.info('LoRA Training')
 
         assert whisper_path
@@ -496,8 +555,10 @@ class SALMONN(nn.Module):
         prompt_template = config.get("prompt_template", "")
         max_txt_len = config.get("max_txt_len", 128)
         end_sym = config.get("end_sym", "</s>")
-        low_resource = config.get("low_resource", False)
-        device_8bit = config.get("device_8bit", 0)
+        pre_quant = config.get("pre_quant", False)
+        quant_8bit = config.get("quant_8bit", False)
+        qunat_4bit  = config.get("quant_4bit", False)
+        device_quant = config.get("device_quant", 0)
 
         token = config.get("token", None)
         only_preprocessor = config.get("only_preprocessor", None)
@@ -525,8 +586,10 @@ class SALMONN(nn.Module):
             prompt_template=prompt_template,
             max_txt_len=max_txt_len,
             end_sym=end_sym,
-            low_resource=low_resource,
-            device_8bit=device_8bit,
+            pre_quant = pre_quant,
+            quant_8bit = quant_8bit,
+            quant_4bit = qunat_4bit,
+            device_quant=device_quant,
             token=token,
             only_preprocessor=only_preprocessor,
         )

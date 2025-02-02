@@ -19,6 +19,7 @@ import random
 import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
+import torch.distributed as dist
 import wandb
 
 from utils import *
@@ -69,7 +70,7 @@ def main():
     # initialize distributed training
     init_distributed_mode(run_config)
     setup_seeds(run_config)
-    setup_logger() # set after init_distributed_mode() to only log on master.
+    setup_logger() # set after init_distributed_mode() to only log on master.'''
 
     # Wandb logger        
     global_rank = int(os.environ.get("RANK", 0))

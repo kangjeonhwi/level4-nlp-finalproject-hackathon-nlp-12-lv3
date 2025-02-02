@@ -12,7 +12,7 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from tensorboardX import SummaryWriter
 import wandb
-
+from dist_utils import get_rank, init_distributed_mode
 from dist_utils import main_process, is_dist_avail_and_initialized, is_main_process, get_rank, get_world_size
 from logger import MetricLogger, SmoothedValue
 from utils import get_dataloader, prepare_sample
@@ -59,13 +59,17 @@ class Runner:
         # model
         self._model = model
         self._model.to(self.device)
+
+        print("complete model load.")
+        print(self.device)
+        print(self.config.config.run.gpu)
+
         if self.use_distributed:
             self.model = DDP(
                 self._model, device_ids=[self.config.config.run.gpu]
             )
         else:
             self.model = self._model
-
         # dataloaders
         self.train_loader = get_dataloader(datasets["train"], self.config.config.run, is_train=True, use_distributed=self.use_distributed)
         self.valid_loader = get_dataloader(datasets["valid"], self.config.config.run, is_train=False, use_distributed=self.use_distributed)
@@ -74,7 +78,7 @@ class Runner:
         # scaler
         self.use_amp = self.config.config.run.get("amp", False)
         if self.use_amp:
-            self.scaler = torch.cuda.amp.GradScaler()
+            self.scaler = torch.amp.GradScaler('cuda')
         else:
             self.scaler = None
 
@@ -123,14 +127,17 @@ class Runner:
             if not self.dryrun:
                 self.scheduler.step(cur_epoch=epoch, cur_step=i)
 
-                with torch.cuda.amp.autocast(enabled=self.use_amp):
-                    loss = self.model(samples)["loss"]
-
-                if self.use_amp:
+                if self.use_amp :
+                    with torch.amp.autocast('cuda') :
+                        loss = self.model(samples)["loss"]
                     self.scaler.scale(loss).backward()
-                else:
+
+                else : 
+                    loss = self.model(samples)["loss"]
                     loss.backward()
 
+         
+                    
                 if (i + 1) % self.config.config.run.accum_grad_iters == 0:
                     if self.use_amp:
                         self.scaler.step(self.optimizer)
