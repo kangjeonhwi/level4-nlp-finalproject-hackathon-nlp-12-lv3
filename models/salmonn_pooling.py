@@ -31,10 +31,8 @@ class SALMONNPooling(SALMONN):
             else:
                 raise NotImplementedError
     
-    def _encode_auditory_feature(self, speech_embeds, audio_embeds=None):
+    def _qformer_forward(self, speech_embeds):
         with self.maybe_autocast():
-            B, _, _ = speech_embeds.shape
-            speech_embeds, kernel = self._average_pooling(speech_embeds, audio_embeds)
             speech_embeds = speech_embeds.reshape(-1, 1, speech_embeds.shape[2])
             speech_atts = torch.ones(speech_embeds.size()[:-1], dtype=torch.long, device=speech_embeds.device)
             
@@ -52,7 +50,13 @@ class SALMONNPooling(SALMONN):
             
             speech_atts = torch.ones(speech_embeds.size()[:-1], dtype=torch.long).to(speech_embeds.device)
             return speech_embeds, speech_atts
-        
+    
+    def _encode_auditory_feature(self, speech_embeds, audio_embeds=None):
+        with self.maybe_autocast():
+            B, _, _ = speech_embeds.shape
+            speech_embeds, kernel = self._average_pooling(speech_embeds, audio_embeds)
+            return self._qformer_forward(speech_embeds)
+
     def get_speech_embeds(self, spectrogram):
         with self.maybe_autocast():
             speech_embeds = self.speech_encoder(spectrogram, return_dict=True).last_hidden_state
@@ -73,3 +77,23 @@ class SALMONNPooling(SALMONN):
                 audio_embeds = None
                         
         return self._encode_auditory_feature(speech_embeds, audio_embeds=audio_embeds)
+    
+    def forward(self, samples, verbose=False):
+        feature = samples.get("feature", None)
+        if feature is None:
+            return super().forward(samples, verbose=verbose)
+        
+        speech_embeds, speech_atts = self._qformer_forward(feature)
+        
+        # wrap speech_embeds with prompts
+        if self.prompt_dict:
+            prompt = self.prepare_prompt(samples)
+            speech_embeds, speech_atts = self.prompt_wrap(speech_embeds, speech_atts, prompt, multi_prompt=self.multi_prompt)
+
+        outputs, correct, total = self.get_output_from_llm(samples["text"], speech_embeds, speech_atts, verbose=verbose)
+        loss = outputs.loss
+
+        if verbose:
+            return {"loss": loss, "correct": correct, "total": total}
+
+        return {"loss": loss}
