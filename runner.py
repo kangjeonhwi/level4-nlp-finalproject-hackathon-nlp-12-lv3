@@ -38,7 +38,7 @@ class Runner:
         self.max_epoch = self.config.config.run.optims.max_epoch
         self.evaluate_only = self.config.config.run.evaluate
         self.cuda_enabled = (self.device.type == "cuda")
-
+        self.best_path = ""
         # test prompt
         self.prompt_template = self.config.config.model.get("prompt_template", "")
         test_prompt_path = self.config.config.model.get("test_prompt_path", "")
@@ -59,10 +59,6 @@ class Runner:
         # model
         self._model = model
         self._model.to(self.device)
-
-        print("complete model load.")
-        print(self.device)
-        print(self.config.config.run.gpu)
 
         if self.use_distributed:
             self.model = DDP(
@@ -377,5 +373,7 @@ class Runner:
             self.output_dir,
             "checkpoint_{}.pth".format("best" if is_best else cur_epoch),
         )
+        if is_best :
+            self.best_path = save_to
         logging.info("Saving checkpoint at epoch {} to {}.".format(cur_epoch, save_to))
         torch.save(save_obj, save_to)
