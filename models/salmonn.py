@@ -324,7 +324,7 @@ class SALMONN(nn.Module):
         else:
             return embeds, atts
 
-    def forward(self, samples, verbose=False):
+    def prepare_prompt(self, samples):
         # detect whether there are multi tasks in this batch
         task = list(set(samples["task"]))
         if len(task) > 1 or "QA" in task:
@@ -338,7 +338,10 @@ class SALMONN(nn.Module):
                     prompt = [p.format(q) if '{}' in p else p for p, q in zip(prompt, samples["Q"]) ]
             else:
                 prompt = random.choice(self.prompt_dict[samples["task"][0]])
+        
+        return prompt
 
+    def forward(self, samples, verbose=False):
         # use speech/audio encoder to encode speech/audio
         spectrogram = samples["spectrogram"]
         raw_wav = samples.get("raw_wav", None)
@@ -348,6 +351,7 @@ class SALMONN(nn.Module):
 
         # wrap speech_embeds with prompts
         if self.prompt_dict:
+            prompt = self.prepare_prompt(samples)
             speech_embeds, speech_atts = self.prompt_wrap(speech_embeds, speech_atts, prompt, multi_prompt=self.multi_prompt)
 
         # prepare inputs for LLM
