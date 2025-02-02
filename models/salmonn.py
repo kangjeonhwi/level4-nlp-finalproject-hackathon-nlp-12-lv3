@@ -341,6 +341,64 @@ class SALMONN(nn.Module):
         
         return prompt
 
+    def get_output_from_llm(self, query, input_embeds, attention_mask, verbose=False):
+        # prepare inputs for LLM
+        text = [t + self.end_sym for t in query]
+        to_regress_tokens = self.llama_tokenizer(
+            text,
+            return_tensors="pt",
+            padding="longest",
+            truncation=True,
+            max_length=self.max_txt_len,
+            add_special_tokens=False
+        ).to(input_embeds.device)
+        to_regress_embeds = self.llama_model.model.embed_tokens(to_regress_tokens.input_ids) if not self.lora else self.llama_model.model.model.embed_tokens(to_regress_tokens.input_ids)
+        targets = to_regress_tokens.input_ids.masked_fill(
+            to_regress_tokens.input_ids == self.llama_tokenizer.pad_token_id, -100
+        )
+        empty_targets = (
+            torch.ones(
+                [attention_mask.shape[0], attention_mask.shape[1] + 1],
+                dtype=torch.long
+            ).to(input_embeds.device).fill_(-100)
+        )
+        targets = torch.cat([empty_targets, targets], dim=1)
+
+        batch_size = input_embeds.shape[0]
+        bos = torch.ones(
+            [batch_size, 1],
+            dtype=to_regress_tokens.input_ids.dtype,
+            device=to_regress_tokens.input_ids.device,
+        ) * self.llama_tokenizer.bos_token_id
+        bos_embeds = self.llama_model.model.embed_tokens(bos) if not self.lora else self.llama_model.model.model.embed_tokens(bos)
+        atts_bos = attention_mask[:, :1]
+
+        inputs_embeds = torch.cat([bos_embeds, input_embeds, to_regress_embeds], dim=1)
+        attention_mask = torch.cat([atts_bos, attention_mask, to_regress_tokens.attention_mask], dim=1)
+
+        # calulate loss
+        with self.maybe_autocast():
+            outputs = self.llama_model(
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                return_dict=True,
+                labels=targets,
+            )
+        
+        correct = None
+        total = None
+            
+        if verbose:
+            nvocab = self.llama_model.config.vocab_size
+            results = outputs.logits[:, empty_targets.size(1) - 1: -1, :].contiguous().view(-1, nvocab).argmax(dim=-1)
+            labels = targets[:, empty_targets.size(1):].contiguous().view(-1)
+            mask = (labels != -100)
+            correct = (results[mask] == labels[mask]).float().sum()
+            total = len(labels[mask])
+        
+        return outputs, correct, total
+            
+
     def forward(self, samples, verbose=False):
         # use speech/audio encoder to encode speech/audio
         spectrogram = samples["spectrogram"]
@@ -354,57 +412,8 @@ class SALMONN(nn.Module):
             prompt = self.prepare_prompt(samples)
             speech_embeds, speech_atts = self.prompt_wrap(speech_embeds, speech_atts, prompt, multi_prompt=self.multi_prompt)
 
-        # prepare inputs for LLM
-        text = [t + self.end_sym for t in samples["text"]]
-        to_regress_tokens = self.llama_tokenizer(
-            text,
-            return_tensors="pt",
-            padding="longest",
-            truncation=True,
-            max_length=self.max_txt_len,
-            add_special_tokens=False
-        ).to(spectrogram.device)
-        to_regress_embeds = self.llama_model.model.embed_tokens(to_regress_tokens.input_ids) if not self.lora else self.llama_model.model.model.embed_tokens(to_regress_tokens.input_ids)
-        targets = to_regress_tokens.input_ids.masked_fill(
-            to_regress_tokens.input_ids == self.llama_tokenizer.pad_token_id, -100
-        )
-        empty_targets = (
-            torch.ones(
-                [speech_atts.shape[0], speech_atts.shape[1] + 1],
-                dtype=torch.long
-            ).to(spectrogram.device).fill_(-100)
-        )
-        targets = torch.cat([empty_targets, targets], dim=1)
-
-        batch_size = speech_embeds.shape[0]
-        bos = torch.ones(
-            [batch_size, 1],
-            dtype=to_regress_tokens.input_ids.dtype,
-            device=to_regress_tokens.input_ids.device,
-        ) * self.llama_tokenizer.bos_token_id
-        bos_embeds = self.llama_model.model.embed_tokens(bos) if not self.lora else self.llama_model.model.model.embed_tokens(bos)
-        atts_bos = speech_atts[:, :1]
-
-        inputs_embeds = torch.cat([bos_embeds, speech_embeds, to_regress_embeds], dim=1)
-        attention_mask = torch.cat([atts_bos, speech_atts, to_regress_tokens.attention_mask], dim=1)
-
-        # calulate loss
-        with self.maybe_autocast():
-            outputs = self.llama_model(
-                inputs_embeds=inputs_embeds,
-                attention_mask=attention_mask,
-                return_dict=True,
-                labels=targets,
-            )
-            loss = outputs.loss
-
-        if verbose:
-            nvocab = self.llama_model.config.vocab_size
-            results = outputs.logits[:, empty_targets.size(1) - 1: -1, :].contiguous().view(-1, nvocab).argmax(dim=-1)
-            labels = targets[:, empty_targets.size(1):].contiguous().view(-1)
-            mask = (labels != -100)
-            correct = (results[mask] == labels[mask]).float().sum()
-            total = len(labels[mask])
+        outputs, correct, total = self.get_output_from_llm(samples["text"], speech_embeds, speech_atts, verbose=verbose)
+        loss = outputs.loss
 
         if verbose:
             return {"loss": loss, "correct": correct, "total": total}
