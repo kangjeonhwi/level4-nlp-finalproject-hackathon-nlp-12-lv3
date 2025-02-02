@@ -20,13 +20,13 @@ class SALMONNPooling(SALMONN):
                     B, T, C = speech_embeds.shape
                     kernel = round(1500 * self.second_per_window / 30.0)
                     stride = round(1500 * self.second_stride / 30.0)
-                    speech_embeds_tr = speech_embeds.transpose(1, 2).unsqueeze(2)
+                    speech_embeds_tr = speech_embeds.transpose(1, 2)
                     speech_embeds_overlap = F.avg_pool1d(speech_embeds_tr, kernel_size=kernel, stride=stride)
                     _, _, L = speech_embeds_overlap.shape
                     speech_embeds_overlap = speech_embeds_overlap.view(B, -1, 1, L)
                     speech_embeds_overlap = torch.permute(speech_embeds_overlap, [0, 3, 2, 1])
-                    speech_embeds = speech_embeds_overlap.reshape(-1, 1, C)
-            
+                    speech_embeds = speech_embeds_overlap.reshape(B, -1, C)
+
                 return speech_embeds, kernel
             else:
                 raise NotImplementedError
@@ -35,6 +35,7 @@ class SALMONNPooling(SALMONN):
         with self.maybe_autocast():
             B, _, _ = speech_embeds.shape
             speech_embeds, kernel = self._average_pooling(speech_embeds, audio_embeds)
+            speech_embeds = speech_embeds.reshape(-1, 1, speech_embeds.shape[2])
             speech_atts = torch.ones(speech_embeds.size()[:-1], dtype=torch.long, device=speech_embeds.device)
             
             query_tokens = self.speech_query_tokens.expand(speech_embeds.shape[0], -1, -1)
@@ -50,7 +51,7 @@ class SALMONNPooling(SALMONN):
                 speech_embeds = speech_embeds.view(B, -1, speech_embeds.size(2)).contiguous()
             
             speech_atts = torch.ones(speech_embeds.size()[:-1], dtype=torch.long).to(speech_embeds.device)
-            return speech_embeds, speech_atts, kernel
+            return speech_embeds, speech_atts
         
     def get_speech_embeds(self, spectrogram):
         with self.maybe_autocast():
@@ -67,7 +68,7 @@ class SALMONNPooling(SALMONN):
             speech_embeds = self.get_speech_embeds(spectrogram)
             
             if self.beats_path and raw_wav is not None:
-                audio_embeds, _ = self.get_audio_embeds(raw_wav, audio_padding_mask)
+                audio_embeds = self.get_audio_embeds(raw_wav, audio_padding_mask)
             else:
                 audio_embeds = None
                         
