@@ -21,6 +21,7 @@ import torch
 import torch.backends.cudnn as cudnn
 import torch.distributed as dist
 import wandb
+import gc
 
 from utils import *
 from config import Config
@@ -41,6 +42,13 @@ def parse_args():
         "change to --cfg-options instead.",
     )
     parser.add_argument("--dryrun", action='store_true', help='if True, use dummy model and skip forward/backward')
+    parser.add_argument(
+        "--stage", 
+        type=str, 
+        choices=["stage1", "stage2", "Merged"], 
+        required=True, 
+        help="Choose training stage: stage1, stage2, or Merged"
+    )
 
     return parser.parse_args()
 
@@ -89,6 +97,7 @@ def main():
     }
 
     # build model
+
     if not args.dryrun:
         model = load_model(model_config)
     else: # load small dummy language model
@@ -96,11 +105,48 @@ def main():
         model = AutoModelForCausalLM.from_pretrained("apple/OpenELM-270M-Instruct", trust_remote_code=True)
 
     # build runner
-    runner = Runner(cfg, model, datasets, job_id, args.dryrun)
+    output_dir = cfg.config.run.output_dir
+    if args.stage == "stage1":
+        cfg.config.run.output_dir = output_dir + "/stage1"
+        runner = Runner(cfg, model, datasets, job_id, args.dryrun)
+        logging.info("Starting Stage 1 Training...")
+        runner.train()
 
-    # train
-    runner.train()
+    elif args.stage == "stage2":
+        cfg.config.run.output_dir = output_dir + "/stage2"
+        runner = Runner(cfg, model, datasets, job_id, args.dryrun)
+        logging.info("Starting Stage 2 Training...")
+        runner.train()
 
+    elif args.stage == "Merged":
+        logging.info("Starting Merged Training (Stage 1 + Stage 2)...")
+
+        # Stage 1 Training
+        cfg.config.run.output_dir = output_dir + "/stage1"
+        runner = Runner(cfg, model, datasets, job_id, args.dryrun)
+        logging.info("Training Stage 1...")
+        runner.train()
+        ckpt_path = runner.best_path
+
+        # Clear memory after Stage 1
+        logging.info("Clearing memory after Stage 1...")
+        del runner  # Runner 객체 삭제
+        del model   # 모델 삭제
+        torch.cuda.empty_cache()  # GPU 메모리 해제
+        gc.collect()  # CPU 메모리 정리
+
+        # Load Stage 1 Model for Stage 2
+        logging.info("Loading Stage 1 Model for Stage 2...")
+        
+        # Reload model and runner for Stage 2
+        model = load_model(model_config)  # 모델 재생성
+        cfg.config.model.ckpt = ckpt_path 
+        cfg.config.run.output_dir = output_dir + "/stage2"
+        runner = Runner(cfg, model, datasets, job_id, args.dryrun)
+
+        # Stage 2 Training
+        logging.info("Training Stage 2...")
+        runner.train()
 
 if __name__ == "__main__":
     main()
