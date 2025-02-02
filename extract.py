@@ -24,7 +24,7 @@ import wandb
 from utils import *
 from config import Config
 from dist_utils import get_rank, init_distributed_mode
-from models import load_model
+from salmonn_utils import load_preprocessor
 from feature_dataset import SALMONNFeatureDataset
 from extractor import Extractor
 
@@ -89,7 +89,7 @@ def main():
 
     # build model
     if not args.dryrun:
-        model = load_model(model_config)
+        model = load_preprocessor(cfg)
     else: # load small dummy language model
         from transformers import AutoModelForCausalLM
         model = AutoModelForCausalLM.from_pretrained("apple/OpenELM-270M-Instruct", trust_remote_code=True)
