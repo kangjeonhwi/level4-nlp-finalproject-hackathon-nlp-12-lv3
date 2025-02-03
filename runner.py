@@ -17,8 +17,8 @@ from dist_utils import main_process, is_dist_avail_and_initialized, is_main_proc
 from logger import MetricLogger, SmoothedValue
 from utils import get_dataloader, prepare_sample
 from optims import get_optimizer, LinearWarmupCosineLRScheduler
-from metrics import compute_wer, compute_spider
-from custom_metrics import compute_per, compute_f1
+#from metrics import compute_wer, compute_spider
+from custom_metrics import compute_per, compute_f1, compute_wer, compute_spider
 
 
 class Runner:
@@ -183,6 +183,8 @@ class Runner:
                 loss = forward_result.get("loss", 0)
                 correct = forward_result.get("correct", 0)
                 total = forward_result.get("total", 1)
+                # decoded_preds = forward_result.get("decoded_preds", None)
+                # decoded_targets = forward_result.get("decoded_targets", None)
                 res = {
                     "id": samples["id"],
                     "ground_truth": samples["text"],
@@ -190,6 +192,8 @@ class Runner:
                     "acc": (correct / total).item(),
                     "total": total,
                     "task": samples["task"],  # task 정보 추가
+                    # "text": decoded_preds,
+                    # "ground_truth": decoded_targets,
                 }
             else:
                 res = {
@@ -239,7 +243,7 @@ class Runner:
             "QA": {"f1": 0.0, "n_sample": 0},
             "phone_recognition": {"per": 0.0, "n_sample": 0},
             "audiocaption_v2": {"spider": 0.0, "n_sample": 0},
-            "gender_recognition": {"accuracy": 0.0, "n_sample": 0},
+            "gender_recognition": {"f1": 0.0, "n_sample": 0},
         }
 
         # 각 샘플에 대해 기존 메트릭 및 task별 메트릭 계산
@@ -255,28 +259,36 @@ class Runner:
             res["n_token"] += item_n_token
 
             # Task별 메트릭 계산
-            task = item["task"]
-            if task in task_metrics:
-                if task == "asr":
-                    wer = compute_wer(item["text"], item["ground_truth"])
-                    task_metrics[task]["wer"] += wer * len(item["id"])
-                    task_metrics[task]["n_sample"] += len(item["id"])
-                elif task == "audiocaption" or task == "audiocaption_v2":
-                    spider = compute_spider(item["text"], item["ground_truth"])
-                    task_metrics[task]["spider"] += spider * len(item["id"])
-                    task_metrics[task]["n_sample"] += len(item["id"])
-                elif task == "QA":
-                    f1 = compute_f1(item["text"], item["ground_truth"])
-                    task_metrics[task]["f1"] += f1 * len(item["id"])
-                    task_metrics[task]["n_sample"] += len(item["id"])
-                elif task == "phone_recognition":
-                    per = compute_per(item["text"], item["ground_truth"])
-                    task_metrics[task]["per"] += per * len(item["id"])
-                    task_metrics[task]["n_sample"] += len(item["id"])
-                elif task == "gender_recognition":
-                    accuracy = item["acc"]  # Accuracy는 이미 계산됨
-                    task_metrics[task]["accuracy"] += accuracy * len(item["id"])
-                    task_metrics[task]["n_sample"] += len(item["id"])
+            tasks = item["task"]
+
+            # tasks, text, ground_truth가 모두 같은 순서로 대응한다고 가정합니다.
+            for i, task in enumerate(tasks):
+                if task in task_metrics:
+                    if task == "asr":
+                        wer = compute_wer(item["text"][i], item["ground_truth"][i])
+                        if wer is None:
+                            wer = 0.0
+                        task_metrics[task]["wer"] += wer  # 각 문장별 계산 후 누적
+                        task_metrics[task]["n_sample"] += 1
+                    elif task in ["audiocaption", "audiocaption_v2"]:
+                        spider_score = compute_spider(item["text"][i], item["ground_truth"][i])
+                        if spider_score is None:
+                            spider_score = 0.0
+                        task_metrics[task]["spider"] += spider_score
+                        task_metrics[task]["n_sample"] += 1
+                    elif task in ["QA", "gender_recognition"]:
+                        f1 = compute_f1(item["text"][i], item["ground_truth"][i])
+                        if f1 is None:
+                            f1 = 0.0
+                        task_metrics[task]["f1"] += f1
+                        task_metrics[task]["n_sample"] += 1
+                    elif task == "phone_recognition":
+                        per = compute_per(item["text"][i], item["ground_truth"][i])
+                        if per is None:
+                            per = 0.0
+                        task_metrics[task]["per"] += per
+                        task_metrics[task]["n_sample"] += 1
+
 
         # 분산 환경에서 모든 프로세스의 결과 합산
         if is_dist_avail_and_initialized():
@@ -302,12 +314,10 @@ class Runner:
                     ret[f"{task}_wer"] = metrics["wer"] / metrics["n_sample"]
                 elif task == "audiocaption" or task == "audiocaption_v2":
                     ret[f"{task}_spider"] = metrics["spider"] / metrics["n_sample"]
-                elif task == "QA":
+                elif task == "QA" or task == "gender_recognition":
                     ret[f"{task}_f1"] = metrics["f1"] / metrics["n_sample"]
                 elif task == "phone_recognition":
                     ret[f"{task}_per"] = metrics["per"] / metrics["n_sample"]
-                elif task == "gender_recognition":
-                    ret[f"{task}_accuracy"] = metrics["accuracy"] / metrics["n_sample"]
 
         return ret
 
@@ -365,7 +375,7 @@ class Runner:
 
             # validating phase
             logging.info("Validating Phase")
-            valid_log = self.valid_epoch(cur_epoch, "valid", decode=False, save_json=False)
+            valid_log = self.valid_epoch(cur_epoch, "valid", decode=True, save_json=False)
             if valid_log is not None:
                 if is_main_process():
                     agg_metrics = valid_log["agg_metrics"]
