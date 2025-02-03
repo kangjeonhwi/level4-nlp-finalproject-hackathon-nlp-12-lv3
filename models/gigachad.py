@@ -50,6 +50,8 @@ class GIGACHAD(SALMONN):
                 rep_dim=rep_dim, 
                 mode=tltr_mode
             )
+        else:
+            raise ValueError("ATModel is required for GIGACHAD")
 
     def encode_speech(self, spectrogram, raw_wav=None, audio_padding_mask=None):
         with self.maybe_autocast():
