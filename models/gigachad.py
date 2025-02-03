@@ -77,6 +77,9 @@ class GIGACHAD(nn.Module):
         second_per_window=0.333333,
         second_stride=0.333333,
         
+        use_at_model=True,
+        freeze_at_model = True,
+        
         speech_llama_proj_model="",
         freeze_speech_llama_proj=False,
 
@@ -106,12 +109,10 @@ class GIGACHAD(nn.Module):
         self.max_txt_len = max_txt_len
         self.end_sym = end_sym
         self.low_resource = low_resource
+        
+        self.use_at_model = use_at_model
+        self.freeze_at_model = freeze_at_model
 
-        self.at_model = ATModel(
-            n_layer=n_layer, 
-            rep_dim=rep_dim, 
-            mode=tltr_mode
-        )
         self.ln_audio = nn.LayerNorm(rep_dim)
 
         logging.info('Loading LLaMA Tokenizer')
@@ -119,6 +120,13 @@ class GIGACHAD(nn.Module):
         self.llama_tokenizer.add_special_tokens({'pad_token': '[PAD]'})
         self.llama_tokenizer.padding_side = "right"
 
+        if use_at_model:
+            self.at_model = ATModel(
+                n_layer=n_layer, 
+                rep_dim=rep_dim, 
+                mode=tltr_mode
+            )
+        
         if not only_preprocessor:
             logging.info('Loading LLaMA Model')
             if self.low_resource:
