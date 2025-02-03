@@ -6,6 +6,7 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
+from torch.utils.checkpoint import checkpoint
 import torch.nn.functional as F
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
@@ -138,11 +139,11 @@ class ATModel(nn.Module):
         # input audio_rep in shape (B, #layer, #time steps, rep_dim), e.g., (B, 32, 25, 1280) # for 30 seconds, 25 = 500 / 20 (downsampling)
         B, num_layer, audio_len, rep_dim = audio_rep.shape[0], audio_rep.shape[1], audio_rep.shape[2], audio_rep.shape[3]
         audio_rep = audio_rep.reshape([B * num_layer, audio_len, rep_dim])  # [B*32, 25, 1280]
-        audio_rep = self.time_tr(audio_rep)  # [B*32, 25, 1280]
+        audio_rep = checkpoint(self.time_tr, audio_rep)  # [B*32, 25, 1280]
         audio_rep = audio_rep.reshape([B, num_layer, audio_len, rep_dim]) # [B, 32, 25, 1280]
         audio_rep = audio_rep.permute([0, 2, 1, 3]) # [B, 25, 32, 1280]
         audio_rep = audio_rep.reshape([B * audio_len, num_layer, rep_dim]) # [B*25, 32, 1280]
-        audio_rep = self.layer_tr(audio_rep)  # [B*25, 32, 1280]
+        audio_rep = checkpoint(self.layer_tr, audio_rep)  # [B*25, 32, 1280]
         audio_rep = torch.mean(audio_rep, dim=1)  # [B*25, 1280]
         audio_rep = audio_rep.reshape([B, audio_len, rep_dim])
         return audio_rep
