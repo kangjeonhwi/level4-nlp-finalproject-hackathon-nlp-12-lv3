@@ -436,19 +436,27 @@ class SALMONN(nn.Module):
         if verbose:
             nvocab = self.llama_model.config.vocab_size
             results = outputs.logits[:, empty_targets.size(1) - 1: -1, :].contiguous().view(-1, nvocab).argmax(dim=-1)
-            decoded_preds = self.llama_tokenizer.batch_decode(
-                results.view(batch_size, -1), skip_special_tokens=True
-            )
-            labels = targets[:, empty_targets.size(1):].contiguous().view(batch_size, -1)
-            decoded_targets = [
-                self.llama_tokenizer.decode(label[label != -100], skip_special_tokens=True)
-                for label in labels
-            ]
+            labels = targets[:, empty_targets.size(1):].contiguous().view(-1)
+            mask = (labels != -100)
+
+            # --- 추가된 부분: 배치 단위로 디코딩하기 ---
+            # 예측 토큰을 flatten하지 않고, 배치 형태로 유지
+            pred_ids_batch = outputs.logits[:, empty_targets.size(1) - 1: -1, :].argmax(dim=-1)  # shape: (batch_size, T)
+            
+            # 정답의 경우, 음성 부분을 제외한 텍스트 부분을 배치 형태로 가져옴
+            labels_batch = targets[:, empty_targets.size(1):]  # shape: (batch_size, T)
+            # -100으로 마스킹된 값은 pad_token_id로 대체하여 decode 에 문제가 없도록 함
+            labels_batch = labels_batch.clone()
+            labels_batch[labels_batch == -100] = self.llama_tokenizer.pad_token_id
+
+            # batch_decode를 사용하여 배치 단위의 디코딩된 문자열 리스트 생성
+            decoded_preds = self.llama_tokenizer.batch_decode(pred_ids_batch, skip_special_tokens=True)
+            decoded_targets = self.llama_tokenizer.batch_decode(labels_batch, skip_special_tokens=True)
 
             return {
                 "loss": loss,
-                "correct": (results.view(-1)[mask] == labels.view(-1)[mask]).float().sum(),
-                "total": len(labels.view(-1)[mask]),
+                "correct": (results[mask] == labels[mask]).float().sum(),
+                "total": len(labels[mask]),
                 "decoded_preds": decoded_preds,
                 "decoded_targets": decoded_targets,
             }
