@@ -78,7 +78,7 @@ class GIGACHAD(nn.Module):
         second_stride=0.333333,
         
         use_at_model=True,
-        freeze_at_model = True,
+        freeze_at_model = False,
         
         speech_llama_proj_model="",
         freeze_speech_llama_proj=False,
