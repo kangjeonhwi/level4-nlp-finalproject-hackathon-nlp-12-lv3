@@ -61,7 +61,8 @@ class Runner:
         self._model.to(self.device)
         if self.use_distributed:
             self.model = DDP(
-                self._model, device_ids=[self.config.config.run.gpu]
+                self._model, device_ids=[self.config.config.run.gpu],
+                find_unused_parameters=True
             )
         else:
             self.model = self._model
