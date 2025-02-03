@@ -1024,35 +1024,6 @@ def compute_f1(prediction: str, ground_truth: str) -> float:
     return f1
 
 
-# def levenshtein_distance(seq1: list, seq2: list) -> int:
-#     """
-#     두 시퀀스(seq1, seq2) 사이의 Levenshtein 거리(편집 거리)를 계산합니다.
-#     편집 거리는 삽입, 삭제, 치환 연산의 최소 횟수입니다.
-#     """
-#     n = len(seq1)
-#     m = len(seq2)
-    
-#     # DP 테이블 초기화 (크기: (n+1) x (m+1))
-#     dp = [[0] * (m + 1) for _ in range(n + 1)]
-#     for i in range(n + 1):
-#         dp[i][0] = i  # seq1의 i개 요소를 모두 삭제하는 비용
-#     for j in range(m + 1):
-#         dp[0][j] = j  # seq2의 j개 요소를 모두 삽입하는 비용
-    
-#     for i in range(1, n + 1):
-#         for j in range(1, m + 1):
-#             if seq1[i - 1] == seq2[j - 1]:
-#                 cost = 0
-#             else:
-#                 cost = 1
-#             dp[i][j] = min(
-#                 dp[i - 1][j] + 1,      # 삭제
-#                 dp[i][j - 1] + 1,      # 삽입
-#                 dp[i - 1][j - 1] + cost  # 치환
-#             )
-#     return dp[n][m]
-
-
 def compute_per(prediction: str, ground_truth: str) -> float:
     """
     음성 인식에서 Phone Error Rate(PER)를 계산합니다.
