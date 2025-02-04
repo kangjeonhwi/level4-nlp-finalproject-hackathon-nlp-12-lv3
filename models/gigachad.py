@@ -77,9 +77,6 @@ class GIGACHAD(SALMONN):
         
         use_at_model = config.get("use_at_model", True)
         freeze_at_model = config.get("freeze_at_model", False)
-
-        speech_llama_proj_model = config.get("speech_llama_proj_model", "")
-        freeze_speech_llama_proj = config.get("freeze_speech_llama_proj", False)
         
         n_layer = config.get("n_layer", 32)
         rep_dim = config.get("rep_dim", 1280)  
@@ -88,8 +85,6 @@ class GIGACHAD(SALMONN):
         config_dict.update({
             "use_at_model": use_at_model,
             "freeze_at_model": freeze_at_model,
-            "speech_llama_proj_model": speech_llama_proj_model,
-            "freeze_speech_llama_proj": freeze_speech_llama_proj,
             "n_layer": n_layer,
             "rep_dim": rep_dim,
             "tltr_mode": tltr_mode,
