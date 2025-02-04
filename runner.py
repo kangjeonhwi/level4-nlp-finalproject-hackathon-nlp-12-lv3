@@ -20,7 +20,7 @@ from optims import get_optimizer, LinearWarmupCosineLRScheduler
 
 
 class Runner:
-    def __init__(self, cfg, model, datasets, job_id, dryrun):
+    def __init__(self, cfg, model, datasets, job_id, dryrun, stage = "stage1"):
         self.config = cfg
 
         # dryrun (test with dummy model)
@@ -38,6 +38,7 @@ class Runner:
         self.max_epoch = self.config.config.run.optims.max_epoch
         self.evaluate_only = self.config.config.run.evaluate
         self.cuda_enabled = (self.device.type == "cuda")
+        self.stage = stage
         self.best_path = ""
         # test prompt
         self.prompt_template = self.config.config.model.get("prompt_template", "")
@@ -111,7 +112,7 @@ class Runner:
                 epoch, self.iters_per_epoch
             )
         )
-        header = "Train: data epoch: [{}]".format(epoch)
+        header = self.stage + "Train: data epoch: [{}]".format(epoch)
 
         for i in metric_logger.log_every(range(self.iters_per_epoch), self.config.config.run.log_freq, header=header, logger=self.log_writter, start_step=epoch*self.iters_per_epoch):
             if i >= self.iters_per_epoch:

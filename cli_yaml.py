@@ -21,74 +21,75 @@ model:
   whisper_path: "{whisper_path}"
   beats_path: "{beats_path}"
 
-  token: "{token}" # Use hf token to access gated repositories 
+  token: "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" # Use hf token to access gated repositories
+  only_preprocessor: False
 
-  ckpt: "{ckpt}" # if not "", load model from ckpt for training or evaluation
+  ckpt: "{ckpt}" # model used for decoding
 
-  freeze_whisper: {freeze_whisper}
-  freeze_beats: {freeze_beats}
-
+  freeze_whisper: True
+  freeze_beats: True
+  
   # window-level Q-Former
-  use_speech_Qformer: {use_speech_Qformer}
-  freeze_speech_QFormer: {freeze_speech_QFormer}
-  window_level_Qformer: {window_level_Qformer}
-  num_speech_query_token: {num_speech_query_token}
-  second_per_window: {second_per_window}
-  second_stride: {second_stride}
+  use_speech_Qformer: True
+  freeze_speech_QFormer: False
+  window_level_Qformer: True
+  num_speech_query_token: 1
+  second_per_window: 0.333333
+  second_stride: 0.333333
 
-  speech_llama_proj_model: "{speech_llama_proj_model}"
-  freeze_speech_llama_proj: {freeze_speech_llama_proj}
+  speech_llama_proj_model: ""
+  freeze_speech_llama_proj: False
 
   # LoRA
-  lora: {lora}
-  lora_rank: {lora_rank}
-  lora_alpha: {lora_alpha}
-  lora_dropout: {lora_dropout}
+  lora: True
+  lora_rank: 8
+  lora_alpha: 32
+  lora_dropout: 0.1
 
-  multi_prompt: {multi_prompt}
-  prompt_template: "{prompt_template}"
-  prompt_path: "{prompt_path}"
-  test_prompt_path: "{test_prompt_path}"
-  max_txt_len: {max_txt_len}
+  multi_prompt: True
+  prompt_template: True
+  prompt_path: "prompts/train_prompt.json"
+  test_prompt_path: "prompts/test_prompt.json"
+  max_txt_len: 300
   end_sym: "{end_sym}"
 
 datasets:
-  prefix: "{datasets_prefix}"
-  train_ann_path: "{train_ann_path}"
-  valid_ann_path: "{valid_ann_path}"
-  test_ann_path: "{test_ann_path}"
+  prefix: "/data/home/datasets"
+  train_ann_path: "data/stage1/train/train_100percent.json"
+  valid_ann_path: "data/stage1/val/val.json"
+  test_ann_path: "data/stage1/test/test.json"
   whisper_path: "{whisper_path}"
 
 run:
   # log & settings
-  seed: {seed}
+  seed: 42
   output_dir: "{output_dir}"
   evaluate: {evaluate} # if True, only evaluate model on test data
   exp_name: "{exp_name}"
 
-  log_freq: {log_freq}
+  log_freq: 5
   epoch_based: {epoch_based}
   iters_per_epoch: {iters_per_epoch}
   accum_grad_iters: {accum_grad_iters}
   batch_size_train: {batch_size_train}
   batch_size_eval: {batch_size_eval}
-  num_workers: {num_workers}
+  num_workers: 8
 
   device: "{device}"
   use_distributed: {use_distributed}
-  amp: {amp}
-  world_size: {world_size}
-  dist_url: "{dist_url}"
+  amp: True
+  world_size: 2
+  dist_url: "env://"
 
   # optimizer & scheduler
   optims:
     max_epoch: {max_epoch}
     warmup_steps: {warmup_steps}
-    warmup_start_lr: {warmup_start_lr}
-    init_lr: {init_lr}
-    min_lr: {min_lr}
-    weight_decay: {weight_decay}
-    beta2: {beta2}
+    warmup_start_lr: 1e-6
+    init_lr: 3e-5
+    min_lr: 1e-5
+    weight_decay: 0.05
+    beta2: 0.999
 """
 
 eval_template = """\
@@ -111,58 +112,78 @@ model:
   whisper_path: "{whisper_path}"
   beats_path: "{beats_path}"
 
-  token: "{token}" # Use hf token to access gated repositories
-  only_preprocessor: {only_preprocessor}
+  token: "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" # Use hf token to access gated repositories
+  only_preprocessor: False
 
   ckpt: "{ckpt}" # model used for decoding
 
-  freeze_whisper: {freeze_whisper}
-  freeze_beats: {freeze_beats}
-
+  freeze_whisper: True
+  freeze_beats: True
+  
   # window-level Q-Former
-  use_speech_Qformer: {use_speech_Qformer}
-  freeze_speech_QFormer: {freeze_speech_QFormer}
-  window_level_Qformer: {window_level_Qformer}
-  num_speech_query_token: {num_speech_query_token}
-  second_per_window: {second_per_window}
-  second_stride: {second_stride}
+  use_speech_Qformer: True
+  freeze_speech_QFormer: False
+  window_level_Qformer: True
+  num_speech_query_token: 1
+  second_per_window: 0.333333
+  second_stride: 0.333333
 
-  speech_llama_proj_model: "{speech_llama_proj_model}"
-  freeze_speech_llama_proj: {freeze_speech_llama_proj}
+  speech_llama_proj_model: ""
+  freeze_speech_llama_proj: False
 
   # LoRA
-  lora: {lora}
-  lora_rank: {lora_rank}
-  lora_alpha: {lora_alpha}
-  lora_dropout: {lora_dropout}
+  lora: True
+  lora_rank: 8
+  lora_alpha: 32
+  lora_dropout: 0.1
 
-  multi_prompt: {multi_prompt}
-  prompt_template: "{prompt_template}"
-  prompt_path: "{prompt_path}"
-  test_prompt_path: "{test_prompt_path}"
-  max_txt_len: {max_txt_len}
+  multi_prompt: True
+  prompt_template: True
+  prompt_path: "prompts/train_prompt.json"
+  test_prompt_path: "prompts/test_prompt.json"
+  max_txt_len: 300
   end_sym: "{end_sym}"
 
 generate:
-  max_new_tokens: {max_new_tokens}
-  num_beams: {num_beams}
-  do_sample: {do_sample}
-  min_length: {min_length}
-  temperature: {temperature}
-  top_p: {top_p}
-  repetition_penalty: {repetition_penalty}
-  length_penalty: {length_penalty}
+  max_new_tokens: 200
+  num_beams: 4
+  do_sample: False
+  min_length: 1
+  temperature: 1.0
+  top_p: 0.9
+  repetition_penalty: 1.0
+  length_penalty: 1.0
   end_sym: "{end_sym}"
 
 datasets:
-  prefix: "{datasets_prefix}"
-  test_ann_path_asr: "{test_ann_path_asr}"
-  test_ann_path_aac: "{test_ann_path_aac}"
-  valid_ann_path: "{valid_ann_path}"
+  prefix: "/data/home/datasets"
+  train_ann_path: "data/stage1/train/train_100percent.json"
+  valid_ann_path: "data/stage1/val/val.json"
+  test_ann_path: "data/stage1/test/test.json"
   whisper_path: "{whisper_path}"
 
 run:
   batch_size_eval: {batch_size_eval}
-  num_workers: {num_workers}
-  device: "{device}"
+  num_workers: 8
+  device: "cuda"
 """
+
+def update_output_dir(cfg, stage, base_output_dir):
+    """
+    config의 output_dir을 stage에 따라 업데이트하는 함수.
+    """
+    cfg.config.run.output_dir = f"{base_output_dir}/{stage}"
+    return cfg
+
+def update_dataset_paths(cfg, stage):
+    """
+    config에 있는 datasets의 경로를 stage별로 업데이트하는 함수.
+    예시에서는 "stage1"이 포함된 경로를 입력받은 stage로 치환.
+    """
+    if "stage1" in cfg.config.datasets.train_ann_path:
+        cfg.config.datasets.train_ann_path = cfg.config.datasets.train_ann_path.replace("stage1", stage)
+    if "stage1" in cfg.config.datasets.valid_ann_path:
+        cfg.config.datasets.valid_ann_path = cfg.config.datasets.valid_ann_path.replace("stage1", stage)
+    if "stage1" in cfg.config.datasets.test_ann_path:
+        cfg.config.datasets.test_ann_path = cfg.config.datasets.test_ann_path.replace("stage1", stage)
+    return cfg

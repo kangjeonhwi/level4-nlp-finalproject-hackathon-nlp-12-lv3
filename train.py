@@ -29,7 +29,7 @@ from dist_utils import get_rank, init_distributed_mode
 from models import load_model
 from dataset import SALMONNDataset
 from runner import Runner
-
+from cli_yaml import update_output_dir, update_dataset_paths
 
 def parse_args():
     parser = argparse.ArgumentParser(description='train parameters')
@@ -45,7 +45,7 @@ def parse_args():
     parser.add_argument(
         "--stage", 
         type=str, 
-        choices=["stage1", "stage2", "Merged"], 
+        choices=["stage1", "stage2", "merged"], 
         required=True, 
         help="Choose training stage: stage1, stage2, or Merged"
     )
@@ -63,6 +63,21 @@ def setup_seeds(config):
     cudnn.benchmark = False
     cudnn.deterministic = True
 
+def run_stage(cfg, model, datasets, job_id, dryrun, stage, base_output_dir):
+    """
+    단일 stage의 training을 실행하는 함수.
+    output_dir과 datasets 경로 업데이트 후 Runner를 생성하고 train() 실행.
+    """
+    logging.info(f"Starting {stage.capitalize()} Training...")
+    
+    # output_dir 업데이트
+    cfg = update_output_dir(cfg, stage, base_output_dir)
+    # datasets 경로 업데이트 (필요한 경우)
+    cfg = update_dataset_paths(cfg, stage)
+    
+    runner = Runner(cfg, model, datasets, job_id, dryrun, stage)
+    runner.train()
+    return runner
 
 def main():
     # set before init_distributed_mode() to ensure the same job_id shared across all ranks.
@@ -105,48 +120,32 @@ def main():
         model = AutoModelForCausalLM.from_pretrained("apple/OpenELM-270M-Instruct", trust_remote_code=True)
 
     # build runner
-    output_dir = cfg.config.run.output_dir
-    if args.stage == "stage1":
-        cfg.config.run.output_dir = output_dir + "/stage1"
-        runner = Runner(cfg, model, datasets, job_id, args.dryrun)
-        logging.info("Starting Stage 1 Training...")
-        runner.train()
-
-    elif args.stage == "stage2":
-        cfg.config.run.output_dir = output_dir + "/stage2"
-        runner = Runner(cfg, model, datasets, job_id, args.dryrun)
-        logging.info("Starting Stage 2 Training...")
-        runner.train()
-
-    elif args.stage == "Merged":
+    base_output_dir = cfg.config.run.output_dir  # 원본 output_dir 저장
+    if args.stage == "Merged":
         logging.info("Starting Merged Training (Stage 1 + Stage 2)...")
-
+        runner = run_stage(cfg, model, datasets, job_id, args.dryrun, stage="stage2", base_output_dir=base_output_dir)
         # Stage 1 Training
-        cfg.config.run.output_dir = output_dir + "/stage1"
-        runner = Runner(cfg, model, datasets, job_id, args.dryrun)
-        logging.info("Training Stage 1...")
-        runner.train()
         ckpt_path = runner.best_path
-
-        # Clear memory after Stage 1
+        # 메모리 정리
         logging.info("Clearing memory after Stage 1...")
-        del runner  # Runner 객체 삭제
-        del model   # 모델 삭제
-        torch.cuda.empty_cache()  # GPU 메모리 해제
-        gc.collect()  # CPU 메모리 정리
+        del runner
+        del model
+        torch.cuda.empty_cache()
+        gc.collect()
 
-        # Load Stage 1 Model for Stage 2
+        # Stage 2를 위해 모델 재로딩 및 config 업데이트
         logging.info("Loading Stage 1 Model for Stage 2...")
+        cfg.config.model.ckpt = ckpt_path
+        model = load_model(model_config)  # 새 모델 생성
         
-        # Reload model and runner for Stage 2
-        model = load_model(model_config)  # 모델 재생성
-        cfg.config.model.ckpt = ckpt_path 
-        cfg.config.run.output_dir = output_dir + "/stage2"
-        runner = Runner(cfg, model, datasets, job_id, args.dryrun)
+        # Stage 2 Training 실행
+        runner = run_stage(cfg, model, datasets, job_id, args.dryrun, stage="stage2", base_output_dir=base_output_dir)
 
-        # Stage 2 Training
-        logging.info("Training Stage 2...")
-        runner.train()
+    else :
+        cfg.config.run.output_dir = base_output_dir + "/" + args.stage
+        logging.info(f"Starting Stage 1 Training...")
+        runner = run_stage(cfg, model, datasets, job_id, args.dryrun, stage="stage1", base_output_dir=base_output_dir)
+
 
 if __name__ == "__main__":
     main()

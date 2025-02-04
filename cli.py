@@ -119,7 +119,7 @@ def train():
     """모델 선택 및 YAML 설정을 통한 학습 진행"""
     click.echo("\n========== 분산 학습 옵션 설정 ==========")
     # 분산 학습 옵션 선택. (검색 결과 [1] 참고)
-    use_dist_input = click.prompt("Use distributed training? (y/n)", type=str, default="n")
+    use_dist_input = click.prompt("Use distributed training? (y/n)", type=str, default="y")
     if use_dist_input.lower() == "y":
         use_distributed = True
         gpu_choice = None
@@ -127,7 +127,7 @@ def train():
         use_distributed = False
         gpu_choice = click.prompt("Select GPU for training (0 또는 1)", type=int, default=0)
     
-    click.echo("\n========== 양자화 설정 (구현안됨됨) ==========")
+    click.echo("\n========== 양자화 설정 (구현안됨) ==========")
     # 분산 학습 옵션 선택. (검색 결과 [1] 참고)
     use_dist_input = click.prompt("Use model quantization model? (4/8/n)", type=str, default="n")
     if use_dist_input.lower() == "n":
@@ -253,65 +253,25 @@ def train():
         "llama_path": llama_path,
         "whisper_path": whisper_path,
         "beats_path": beats_path,
-        "token": "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",
         "only_preprocessor" : False,
         "ckpt": ckpt,
-        
-        # 고정 하이퍼파라미터
-        "freeze_whisper": True,
-        "freeze_beats": True,
-        "use_speech_Qformer": True,
-        "freeze_speech_QFormer": False,
-        "window_level_Qformer": True,
-        "num_speech_query_token": 1,
-        "second_per_window": 0.333333,
-        "second_stride": 0.333333,
-        "speech_llama_proj_model": "",
-        "freeze_speech_llama_proj": False,
-        "lora": True,
-        "lora_rank": 8,
-        "lora_alpha": 32,
-        "lora_dropout": 0.1,
-        "multi_prompt": True,
-        "prompt_template": "USER: {}\\nASSISTANT:",
-        "prompt_path": "prompts/train_prompt.json",
-        "test_prompt_path": "prompts/test_prompt.json",
-        "max_txt_len": 300,
         "end_sym": end_sym,
         
-        # 데이터셋 설정
-        "datasets_prefix": "/data/home/datasets",
-        "train_ann_path": "data/stage1/train/train_100percent.json",
-        "valid_ann_path": "data/stage1/val/val.json",
-        "test_ann_path": "data/stage1/test/test.json",
-        
         # 런타임 설정
-        "seed": 42,
         "output_dir": str(output_dir_path),
         "evaluate": training_params["evaluate"],
         "exp_name": exp_name,
-        "log_freq": 5,
         "epoch_based": training_params["epoch_based"],
         "iters_per_epoch": training_params["iters_per_epoch"],
         "accum_grad_iters": training_params["accum_grad_iters"],
         "batch_size_train": training_params["batch_size_train"],
         "batch_size_eval": training_params["batch_size_eval"],
-        "num_workers": 8,
         "device": run_device,
         "use_distributed": use_distributed,
-        "amp": True,
-        "world_size": 2,
-        "dist_url": "env://",
         
         # 최적화 설정
         "max_epoch": training_params["max_epoch"],
-        "warmup_steps": training_params["warmup_steps"],
-        "warmup_start_lr": 1e-6,
-        "init_lr": 3e-5,
-        "min_lr": 1e-5,
-        "weight_decay": 0.05,
-        "beta2": 0.999
-        
+        "warmup_steps": training_params["warmup_steps"],        
     }
 
     # YAML 파일 3종 (train_stage1.yaml, train_stage2.yaml, evaluation.yaml) 생성
