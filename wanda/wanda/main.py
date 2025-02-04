@@ -74,34 +74,11 @@ def main():
         elif "ablate" in args.prune_method:
             prune_ablate(args, model, tokenizer, device, prune_n=prune_n, prune_m=prune_m)
 
-    ################################################################
     print("*"*30)
     sparsity_ratio = check_sparsity(model)
     print(f"sparsity sanity check {sparsity_ratio:.4f}")
     print("*"*30)
-    ################################################################
-    # ppl_test = eval_ppl(args, model, tokenizer, device)
-    # print(f"wikitext perplexity {ppl_test}")
-
-    # if not os.path.exists(args.save):
-    #     os.makedirs(args.save)
-    # save_filepath = os.path.join(args.save, f"log_{args.prune_method}.txt")
-    # with open(save_filepath, "w") as f:
-    #     print("method\tactual_sparsity\tppl_test", file=f, flush=True)
-    #     print(f"{args.prune_method}\t{sparsity_ratio:.4f}\t{ppl_test:.4f}", file=f, flush=True)
-
-    # if args.eval_zero_shot:
-    #     accelerate=False
-    #     if "30b" in args.model or "65b" in args.model or "70b" in args.model:
-    #         accelerate=True
-
-    #     task_list = ["boolq", "rte","hellaswag","winogrande", "arc_easy","arc_challenge", "openbookqa"]
-    #     num_shot = 0
-    #     results = eval_zero_shot(args.model, model, tokenizer, task_list, num_shot, accelerate)
-    #     print("********************************")
-    #     print("zero_shot evaluation results")
-    #     print(results)
-
+    
     if args.save_model:
         model.save_pretrained(args.save_model)
         tokenizer.save_pretrained(args.save_model)
