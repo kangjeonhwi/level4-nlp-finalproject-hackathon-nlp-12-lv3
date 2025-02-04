@@ -11,6 +11,8 @@ from collections import defaultdict, Counter
 from typing import Any, Callable, Mapping, Union, Iterator, List, Match, Optional
 from more_itertools import windowed
 from aac_metrics.functional.spider import spider
+from aac_metrics.functional.spice import spice
+from nltk.translate.meteor_score import meteor_score
 
 ADDITIONAL_DIACRITICS = {
     "œ": "oe",
@@ -646,6 +648,43 @@ class EvaluationTokenizer(object):
 
         return tokenized
 
+def compute_wer(hyp: str, ref: str) -> float:
+    """
+    단일 문장에 대해 단어 단위의 WER (Word Error Rate)를 계산합니다.
+    
+    Args:
+        hyp: 모델의 예측 문장 (예: "this is a test")
+        ref: 정답 문장 (예: "this is a test")
+        
+    Returns:
+        WER 값 (실수)
+    """
+    # 1. 입력 문장을 정규화합니다.
+    normalizer = EnglishTextNormalizer()
+    norm_ref = normalizer(ref)
+    norm_hyp = normalizer(hyp)
+    
+    # 2. 평가 전용 토크나이저로 토큰화합니다.
+    tokenizer = EvaluationTokenizer(
+        tokenizer_type="13a",
+        lowercase=True,
+        punctuation_removal=True,
+        character_tokenization=False,
+    )
+    ref_tokens = tokenizer.tokenize(norm_ref).split()
+    hyp_tokens = tokenizer.tokenize(norm_hyp).split()
+    
+    # 만약 정답 문장이 비어있다면 0으로 처리합니다.
+    if len(ref_tokens) == 0:
+        return 0.0
+    
+    # 3. 편집 거리(Levenshtein distance) 계산
+    distance = ed.eval(ref_tokens, hyp_tokens)
+    wer = distance / len(ref_tokens)
+    
+    #print(f"WER: {wer*100:0.4f}%")
+    return wer
+
 def cider_d(
     candidates: list[str],
     mult_references: list[list[str]],
@@ -922,43 +961,6 @@ class ParticipantVisibleError(Exception):
     # All other errors will only be shown to the competition host. This helps prevent unintentional leakage of solution data.
     pass
 
-def compute_wer(hyp: str, ref: str) -> float:
-    """
-    단일 문장에 대해 단어 단위의 WER (Word Error Rate)를 계산합니다.
-    
-    Args:
-        hyp: 모델의 예측 문장 (예: "this is a test")
-        ref: 정답 문장 (예: "this is a test")
-        
-    Returns:
-        WER 값 (실수)
-    """
-    # 1. 입력 문장을 정규화합니다.
-    normalizer = EnglishTextNormalizer()
-    norm_ref = normalizer(ref)
-    norm_hyp = normalizer(hyp)
-    
-    # 2. 평가 전용 토크나이저로 토큰화합니다.
-    tokenizer = EvaluationTokenizer(
-        tokenizer_type="13a",
-        lowercase=True,
-        punctuation_removal=True,
-        character_tokenization=False,
-    )
-    ref_tokens = tokenizer.tokenize(norm_ref).split()
-    hyp_tokens = tokenizer.tokenize(norm_hyp).split()
-    
-    # 만약 정답 문장이 비어있다면 0으로 처리합니다.
-    if len(ref_tokens) == 0:
-        return 0.0
-    
-    # 3. 편집 거리(Levenshtein distance) 계산
-    distance = ed.eval(ref_tokens, hyp_tokens)
-    wer = distance / len(ref_tokens)
-    
-    print(f"WER: {wer*100:0.4f}%")
-    return wer
-
 
 def compute_spider(hyp: str, ref: str) -> float:
     """
@@ -975,14 +977,33 @@ def compute_spider(hyp: str, ref: str) -> float:
         SPIDEr 점수 (실수)
     """
     # 단일 문장을 입력받기 때문에, 후보는 [hyp]로, 참조는 [[ref]] 형태로 만듭니다.
-    candidates = [hyp]
-    mult_references = [[ref]]
+    candidates = [hyp, hyp]
+    mult_references = [[ref],[ref]]
     spider_result = spider(candidates=candidates, mult_references=mult_references)
     spider_score = round(float(spider_result[0]['spider']), 4)
     
-    print(f"SPIDEr: {spider_score}")
+    #print(f"SPIDEr: {spider_score}")
     return spider_score
 
+def compute_spice(hyp: str, ref: str) -> float:
+    """
+    단일 문장에 대해 SPICE 점수를 계산합니다.
+    
+    Args:
+        hyp: 모델의 예측 문장 (예: "this is a test")
+        ref: 정답 문장 (예: "this is a test")
+        
+    Returns:
+        SPICE 점수 (실수)
+    """
+    # 단일 문장을 입력받기 때문에, 후보는 [hyp]로, 참조는 [[ref]] 형태로 만듭니다.
+    candidates = [hyp]
+    mult_references = [[ref]]
+    spice_result = spice(candidates=candidates, mult_references=mult_references)
+    spice_score = round(float(spice_result[0]['spice']), 4)
+    
+    #print(f"SPICE: {spice_score}")
+    return spice_score
 
 def compute_f1(prediction: str, ground_truth: str) -> float:
     """
@@ -1043,3 +1064,20 @@ def compute_per(prediction: str, ground_truth: str) -> float:
     edit_distance = ed.eval(pred_tokens, gt_tokens)
     per = edit_distance / len(gt_tokens)
     return per
+
+
+def compute_meteor(hyp: str, ref: str) -> float:
+    """
+    단일 문장에 대해 METEOR 점수를 계산합니다.
+    
+    Args:
+        hyp: 모델의 예측 문장 (예: "this is test")
+        ref: 정답 문장 (예: "this is a test")
+    
+    Returns:
+        meteor 점수 (0 ~ 1 사이 부동소수점), 1에 가까울수록 두 문장이 유사.
+    """
+    # NLTK의 meteor_score 함수는 기본적으로 띄어쓰기를 기준으로 토큰화합니다.
+    # 만약 더 세밀한 토크나이징을 원하면, 직접 tokenize 후 리스트 형태로 넘길 수 있습니다.
+    score = meteor_score([ref.split()], hyp.split())
+    return score
