@@ -17,7 +17,7 @@ from dist_utils import main_process, is_dist_avail_and_initialized, is_main_proc
 from logger import MetricLogger, SmoothedValue
 from utils import get_dataloader, prepare_sample
 from optims import get_optimizer, LinearWarmupCosineLRScheduler
-#from metrics import compute_wer, compute_spider
+# from metrics import compute_wer, compute_spider
 from custom_metrics import compute_per, compute_f1, compute_wer, compute_spider
 
 
@@ -183,8 +183,6 @@ class Runner:
                 loss = forward_result.get("loss", 0)
                 correct = forward_result.get("correct", 0)
                 total = forward_result.get("total", 1)
-                # decoded_preds = forward_result.get("decoded_preds", None)
-                # decoded_targets = forward_result.get("decoded_targets", None)
                 res = {
                     "id": samples["id"],
                     "ground_truth": samples["text"],
@@ -192,8 +190,6 @@ class Runner:
                     "acc": (correct / total).item(),
                     "total": total,
                     "task": samples["task"],  # task 정보 추가
-                    # "text": decoded_preds,
-                    # "ground_truth": decoded_targets,
                 }
             else:
                 res = {
@@ -387,7 +383,6 @@ class Runner:
 
                     valid_log.update({"best_epoch": best_epoch})
                     self.log_stats(valid_log, split_name="valid")
-                    # wandb.log({"valid/epoch": cur_epoch, "valid/agg_metrics": agg_metrics})
                     # WandB에 로깅
                     wandb_log = {
                         "valid/epoch": cur_epoch,
