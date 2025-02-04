@@ -23,20 +23,7 @@ from config import Config
 from dataset import SALMONNDataset
 from utils import get_dataloader, prepare_sample
 from models.salmonn import SALMONN
-
-
-def load_model(salmonn_preprocessor):
-    model = salmonn_preprocessor.llama_model
-    tokenizer = salmonn_preprocessor.llama_tokenizer
-    return model, tokenizer
-
-
-def load_preprocessor(cfg):
-    salmonn_preprocessor = SALMONN.from_config(cfg.config.model)
-    salmonn_preprocessor.to(cfg.config.run.device)
-    salmonn_preprocessor.eval()
-    return salmonn_preprocessor
-
+from salmonn_utils import load_preprocessor, load_model
 
 class MockDataset(SALMONNDataset):
     def __init__(self, cfg, sr, audio_length, dataset_length):

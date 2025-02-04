@@ -226,51 +226,6 @@ class SALMONN(nn.Module):
                 self.prompt_dict[task] = [prompt_template.format(p) for p in filted_prompts]
             print("Loading training prompts done!")
 
-    def _encode_auditory_feature(self, speech_embeds, audio_embeds=None):
-        with self.maybe_autocast():
-            if self.use_speech_Qformer:
-                speech_embeds = self.ln_speech(speech_embeds)
-                if audio_embeds is not None:
-                    audio_embeds = self.ln_audio(audio_embeds)
-                    if audio_embeds.size(1) < speech_embeds.size(1):
-                        audio_embeds = F.pad(audio_embeds, (0, 0, 0, speech_embeds.size(1) - audio_embeds.size(1)))
-                    elif audio_embeds.size(1) > speech_embeds.size(1):
-                        speech_embeds = F.pad(speech_embeds, (0, 0, 0, audio_embeds.size(1) - speech_embeds.size(1)))
-                    speech_embeds = torch.cat((speech_embeds, audio_embeds), dim=-1)
-                speech_atts = torch.ones(speech_embeds.size()[:-1], dtype=torch.long).to(speech_embeds.device)
-
-                if self.window_level_Qformer:
-                    B, T, C = speech_embeds.shape
-                    kernel = round(1500 * self.second_per_window / 30.0)
-                    stride = round(1500 * self.second_stride / 30.0)
-                    kernel = (1, kernel)
-                    stride = (1, stride)
-                    speech_embeds_tr = speech_embeds.transpose(1, 2).unsqueeze(2)
-                    speech_embeds_overlap = F.unfold(speech_embeds_tr, kernel_size=kernel, dilation=1, padding=0, stride=stride)
-                    _, _, L = speech_embeds_overlap.shape
-                    speech_embeds_overlap = speech_embeds_overlap.view(B, -1, kernel[1], L)
-                    speech_embeds_overlap = torch.permute(speech_embeds_overlap, [0, 3, 2, 1])
-                    speech_embeds = speech_embeds_overlap.reshape(-1, kernel[1], C)
-                    speech_atts = torch.ones(speech_embeds.size()[:-1], dtype=torch.long, device=speech_embeds.device)
-
-                query_tokens = self.speech_query_tokens.expand(speech_embeds.shape[0], -1, -1)
-                query_output = self.speech_Qformer.bert(
-                    query_embeds=query_tokens,
-                    encoder_hidden_states=speech_embeds,
-                    encoder_attention_mask=speech_atts,
-                    return_dict=True,
-                )
-                speech_embeds = self.speech_llama_proj(query_output.last_hidden_state)
-
-                if self.window_level_Qformer:
-                    speech_embeds = speech_embeds.view(B, -1, speech_embeds.size(2)).contiguous()
-
-                speech_atts = torch.ones(speech_embeds.size()[:-1], dtype=torch.long).to(speech_embeds.device)
-            else:
-                raise NotImplementedError
-
-        return speech_embeds, speech_atts
-
     def encode_speech(self, spectrogram, raw_wav=None, audio_padding_mask=None):
         with self.maybe_autocast():
             speech_embeds = self.speech_encoder(spectrogram, return_dict=True).last_hidden_state
@@ -451,7 +406,7 @@ class SALMONN(nn.Module):
         return text
 
     @classmethod
-    def from_config(cls, config):
+    def parse_config(cls, config):
         llama_path = config.get("llama_path")
         whisper_path = config.get("whisper_path")
         freeze_whisper = config.get("freeze_whisper", True)
@@ -483,35 +438,44 @@ class SALMONN(nn.Module):
 
         token = config.get("token", None)
         only_preprocessor = config.get("only_preprocessor", None)
+        
+        return {
+            "llama_path" : llama_path,
+            "whisper_path" : whisper_path,
+            "freeze_whisper" : freeze_whisper,
+            "beats_path" : beats_path,
+            "freeze_beats" : freeze_beats,
+            
+            "use_speech_Qformer" : use_speech_Qformer,
+            "num_speech_query_token" : num_speech_query_token,
+            "freeze_speech_QFormer" : freeze_speech_QFormer,
+            "window_level_Qformer" : window_level_Qformer,
+            "second_per_window" : second_per_window,
+            "second_stride" : second_stride,
 
-        model = cls(
-            llama_path=llama_path,
-            whisper_path=whisper_path,
-            freeze_whisper=freeze_whisper,
-            beats_path=beats_path,
-            freeze_beats=freeze_beats,
-            use_speech_Qformer=use_speech_Qformer,
-            num_speech_query_token=num_speech_query_token,
-            freeze_speech_QFormer=freeze_speech_QFormer,
-            window_level_Qformer=window_level_Qformer,
-            second_per_window=second_per_window,
-            second_stride=second_stride,
-            speech_llama_proj_model=speech_llama_proj_model,
-            freeze_speech_llama_proj=freeze_speech_llama_proj,
-            lora=lora,
-            lora_rank=lora_rank,
-            lora_alpha=lora_alpha,
-            lora_dropout=lora_dropout,
-            multi_prompt=multi_prompt,
-            prompt_path=prompt_path,
-            prompt_template=prompt_template,
-            max_txt_len=max_txt_len,
-            end_sym=end_sym,
-            low_resource=low_resource,
-            device_8bit=device_8bit,
-            token=token,
-            only_preprocessor=only_preprocessor,
-        )
+            "speech_llama_proj_model" : speech_llama_proj_model,
+            "freeze_speech_llama_proj" : freeze_speech_llama_proj,
+            
+            "lora" : lora,
+            "lora_rank" : lora_rank,
+            "lora_alpha" : lora_alpha,
+            "lora_dropout" : lora_dropout,
+            
+            "multi_prompt" : multi_prompt,
+            "prompt_path" : prompt_path,
+            "prompt_template" : prompt_template,
+            "max_txt_len" : max_txt_len,
+            "end_sym" : end_sym,
+            "low_resource" : low_resource,
+            "device_8bit" : device_8bit,
+            
+            "token" : token,
+            "only_preprocessor" : only_preprocessor,
+        }
+        
+    @classmethod
+    def from_config(cls, config):
+        model = cls(**cls.parse_config(config))
 
         ckpt_path = config.get("ckpt", "")
         if ckpt_path:
