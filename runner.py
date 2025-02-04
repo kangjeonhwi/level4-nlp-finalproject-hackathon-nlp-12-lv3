@@ -18,7 +18,7 @@ from logger import MetricLogger, SmoothedValue
 from utils import get_dataloader, prepare_sample
 from optims import get_optimizer, LinearWarmupCosineLRScheduler
 # from metrics import compute_wer, compute_spider
-from custom_metrics import compute_per, compute_f1, compute_wer, compute_spider
+from custom_metrics import compute_per, compute_f1, compute_wer, compute_spider, compute_meteor
 
 
 class Runner:
@@ -235,10 +235,10 @@ class Runner:
         # Task별 메트릭 계산을 위한 초기화
         task_metrics = {
             "asr": {"wer": 0.0, "n_sample": 0},
-            "audiocaption": {"spider": 0.0, "n_sample": 0},
+            "audiocaption": {"meteor": 0.0, "n_sample": 0},
             "QA": {"f1": 0.0, "n_sample": 0},
             "phone_recognition": {"per": 0.0, "n_sample": 0},
-            "audiocaption_v2": {"spider": 0.0, "n_sample": 0},
+            "audiocaption_v2": {"meteor": 0.0, "n_sample": 0},
             "gender_recognition": {"f1": 0.0, "n_sample": 0},
         }
 
@@ -267,10 +267,10 @@ class Runner:
                         task_metrics[task]["wer"] += wer  # 각 문장별 계산 후 누적
                         task_metrics[task]["n_sample"] += 1
                     elif task in ["audiocaption", "audiocaption_v2"]:
-                        spider_score = compute_spider(item["text"][i], item["ground_truth"][i])
-                        if spider_score is None:
-                            spider_score = 0.0
-                        task_metrics[task]["spider"] += spider_score
+                        meteor_score = compute_meteor(item["text"][i], item["ground_truth"][i])
+                        if meteor_score is None:
+                            meteor_score = 0.0
+                        task_metrics[task]["meteor"] += meteor_score
                         task_metrics[task]["n_sample"] += 1
                     elif task in ["QA", "gender_recognition"]:
                         f1 = compute_f1(item["text"][i], item["ground_truth"][i])
@@ -309,7 +309,7 @@ class Runner:
                 if task == "asr":
                     ret[f"{task}_wer"] = metrics["wer"] / metrics["n_sample"]
                 elif task == "audiocaption" or task == "audiocaption_v2":
-                    ret[f"{task}_spider"] = metrics["spider"] / metrics["n_sample"]
+                    ret[f"{task}_meteor"] = metrics["meteor"] / metrics["n_sample"]
                 elif task == "QA" or task == "gender_recognition":
                     ret[f"{task}_f1"] = metrics["f1"] / metrics["n_sample"]
                 elif task == "phone_recognition":
@@ -393,8 +393,8 @@ class Runner:
                     # Task별 메트릭 추가
                     task_metrics = {
                         "asr": "wer",
-                        "audiocaption": "spider",
-                        "audiocaption_v2": "spider",
+                        "audiocaption": "meteor",
+                        "audiocaption_v2": "meteor",
                         "QA": "f1",
                         "phone_recognition": "per",
                         "gender_recognition": "f1",
