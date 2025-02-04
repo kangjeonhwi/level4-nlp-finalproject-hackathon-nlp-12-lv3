@@ -387,7 +387,29 @@ class Runner:
 
                     valid_log.update({"best_epoch": best_epoch})
                     self.log_stats(valid_log, split_name="valid")
-                    wandb.log({"valid/epoch": cur_epoch, "valid/agg_metrics": agg_metrics})
+                    # wandb.log({"valid/epoch": cur_epoch, "valid/agg_metrics": agg_metrics})
+                    # WandB에 로깅
+                    wandb_log = {
+                        "valid/epoch": cur_epoch,
+                        "valid/agg_metrics": agg_metrics,
+                        "valid/loss": valid_log["loss"],
+                    }
+
+                    # Task별 메트릭 추가
+                    task_metrics = {
+                        "asr": "wer",
+                        "audiocaption": "spider",
+                        "audiocaption_v2": "spider",
+                        "QA": "f1",
+                        "phone_recognition": "per",
+                        "gender_recognition": "f1",
+                    }
+
+                    for task, metric_name in task_metrics.items():
+                        if f"{task}_{metric_name}" in valid_log:
+                            wandb_log[f"valid/{task}_{metric_name}"] = valid_log[f"{task}_{metric_name}"]
+
+                    wandb.log(wandb_log)
 
             self.save_checkpoint(cur_epoch, is_best=False)
 
