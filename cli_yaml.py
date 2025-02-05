@@ -1,4 +1,5 @@
 # cli_yaml.py
+import json
 
 train_template = """\
 # Copyright (2024) Tsinghua University, Bytedance Ltd. and/or its affiliates
@@ -45,9 +46,13 @@ model:
   lora_rank: 8
   lora_alpha: 32
   lora_dropout: 0.1
+  
+  #quantization
+  quant_4bit : {quant_4bit}
+  quant_8bit : {quant_8bit}
 
   multi_prompt: True
-  prompt_template: True
+  prompt_template: "USER: {{}}\\nASSISTANT:"
   prompt_path: "prompts/train_prompt.json"
   test_prompt_path: "prompts/test_prompt.json"
   max_txt_len: 300
@@ -75,10 +80,11 @@ run:
   batch_size_eval: {batch_size_eval}
   num_workers: 8
 
-  device: "{device}"
+  device: "cuda"
   use_distributed: {use_distributed}
+  run_device : {run_device}
   amp: True
-  world_size: 2
+  world_size: {world_size}
   dist_url: "env://"
 
   # optimizer & scheduler
@@ -136,9 +142,13 @@ model:
   lora_rank: 8
   lora_alpha: 32
   lora_dropout: 0.1
+  
+  #quantization
+  quant_4bit : {quant_4bit}
+  quant_8bit : {quant_8bit}
 
   multi_prompt: True
-  prompt_template: True
+  prompt_template: "USER: {{}}\\nASSISTANT:"
   prompt_path: "prompts/train_prompt.json"
   test_prompt_path: "prompts/test_prompt.json"
   max_txt_len: 300
@@ -187,3 +197,4 @@ def update_dataset_paths(cfg, stage):
     if "stage1" in cfg.config.datasets.test_ann_path:
         cfg.config.datasets.test_ann_path = cfg.config.datasets.test_ann_path.replace("stage1", stage)
     return cfg
+  

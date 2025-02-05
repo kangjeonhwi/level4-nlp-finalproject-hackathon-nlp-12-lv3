@@ -1,12 +1,13 @@
 import click
 import json
+import yaml
 import os
 import shutil
 import yaml
+import subprocess
 from pathlib import Path
 from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedTokenizerBase
 from cli_yaml import train_template, eval_template
-
 # 기본 경로 설정
 BASE_DIR = Path(os.path.dirname(os.path.abspath(__file__)))
 CACHE_PATH = BASE_DIR.parent / "models" / "cache.json"
@@ -44,7 +45,9 @@ def display_models_by_type(models, model_type):
     for idx, name in enumerate(models.keys(), 1):
         click.echo(f"  {idx}. {name}")
     if model_type == 'llm':
-        click.echo("  0. 새로운 Huggingface 모델 추가")
+        click.echo("  0. 새로운 Huggingface LLM 추가")
+    if model_type == 'encoder_asr' :
+        click.echo("  0. 새로운 Huggingface ASR encoder 추가")
 
 def reorganize_model_directory(org_name, model_id):
     src_dir = MODELS_DIR / f"models--{org_name}--{model_id}"
@@ -63,7 +66,7 @@ def select_model(cache, model_type):
     display_models_by_type(filtered_models, model_type)
     while True:
         choice = click.prompt(f"{model_type} 모델 번호를 선택하세요", type=int)
-        if model_type == 'llm' and choice == 0:
+        if choice == 0:
             model_name = click.prompt("Huggingface 모델 경로를 입력하세요", type=str)
             try:
                 model = AutoModelForCausalLM.from_pretrained(
@@ -87,7 +90,7 @@ def select_model(cache, model_type):
                 cache[model_key] = {
                     "path": str(final_path.relative_to(MODELS_DIR)),
                     "LoRA": has_lora,
-                    "type": "llm",
+                    "type": model_type,
                     "ckpts": [],
                     "eos_token": tokenizer.eos_token
                 }
@@ -109,6 +112,43 @@ def select_model_path_by_keyword(cache, keyword):
     key = list(candidates.keys())[0]
     return str(MODELS_DIR / candidates[key]['path'])
 
+def run_training_from_config(config_file_path, stage):
+    """
+    config_file_path에 지정된 YAML 설정 파일을 읽어서
+    환경설정에 필요한 변수들을 추출한 후, 훈련을 진행하는 함수입니다.
+    """    
+    with open(config_file_path, 'r', encoding='utf-8') as f : 
+        cfg = yaml.safe_load(f)
+    # YAML 설정 파일에서 필요한 값들을 추출 (없으면 기본값을 지정)
+    
+    use_distributed = cfg['run']['use_distributed']
+    gpu_choice = cfg['run']['run_device']
+
+    # 훈련 진행 여부를 사용자에게 물어봄
+    click.echo(cfg)
+    proceed = click.prompt("\n주어진 설정으로 훈련을 진행하시겠습니까? (y/n)", type=str, default="n")
+    if proceed.lower() == "y":
+        click.echo("\n==> 훈련을 진행합니다.")
+        env = os.environ.copy()
+        env.update({
+            "ACCELERATE_USE_FSDP": "1",
+            "FSDP_CPU_RAM_EFFICIENT_LOADING": "1",
+            "NCCL_IB_DISABLE": "1",
+            "CUDA_LAUNCH_BLOCKING": "1",
+            "TORCH_USE_CUDA_DSA": "1",
+            "CUDA_VISIBLE_DEVICES": "0,1",
+        })
+        if not use_distributed:
+            # gpu_choice가 string 값으로 들어와야 함 (예: "0")
+            env.update({"CUDA_VISIBLE_DEVICES": f"{gpu_choice}"})
+        
+        # project_config_dir와 stage를 사용하여 bash command 구성
+        bash_command = f"accelerate launch train.py --cfg-path {config_file_path} --stage {stage}"
+        click.echo(f"Executing command: {bash_command}")
+        subprocess.run(bash_command, shell=True, env=env)
+    else:
+        click.echo("\n==> 훈련이 취소되었습니다.")
+        
 @click.group()
 def cli():
     """Audio Model Training CLI"""
@@ -117,27 +157,49 @@ def cli():
 @cli.command()
 def train():
     """모델 선택 및 YAML 설정을 통한 학습 진행"""
+    click.echo("\n========== 모델 체크포인트 설정 ==========")
+    ckpt = click.prompt("ckpt (모델 체크포인트, 없으면 엔터 Stage2만 학습 시 반드시 필요)", default="", show_default=False)
+    click.echo("\n========== Stage 설정 ==========")
+    click.echo(f"  0 : Stage1, Stage2 동시에 진행")
+    click.echo(f"  1 : Stage1만 진행")
+    click.echo(f"  2 : Stage2만 진행 / ckpt 경로 입력 필요")
+    stage_input = click.prompt("stage 선택 (0/1/2)", type=str, default="0")
+
+    if stage_input == "0":
+        stage = 'Merged'
+    elif stage_input == "1" :
+        stage = 'stage1'
+    elif stage_input == '2' :
+        stage = 'stage2'
+        if ckpt == "" :
+            click.echo("Error: Stage2를 선택할 경우, ckpt(모델 체크포인트) 값은 필수입니다.", err=True)
+            raise click.ClickException("체크포인트(ckpt) 값이 제공되지 않았습니다.")
+        # ckpt (비워두거나 필요 시 입력)
+        
+    config_file_input = click.prompt("\n사용할 config 파일의 경로를 입력하시겠습니까? (없으면 엔터)", default="", show_default=False)
+    if config_file_input:  
+        click.echo(f"\n==> {config_file_input} 경로의 config 파일을 사용합니다.")
+        run_training_from_config(config_file_input, stage)
+        
     click.echo("\n========== 분산 학습 옵션 설정 ==========")
-    # 분산 학습 옵션 선택. (검색 결과 [1] 참고)
     use_dist_input = click.prompt("Use distributed training? (y/n)", type=str, default="y")
     if use_dist_input.lower() == "y":
         use_distributed = True
         gpu_choice = None
+        world_size = 2
     else:
         use_distributed = False
         gpu_choice = click.prompt("Select GPU for training (0 또는 1)", type=int, default=0)
+        world_size = 1
     
     click.echo("\n========== 양자화 설정 (구현안됨) ==========")
-    # 분산 학습 옵션 선택. (검색 결과 [1] 참고)
     use_dist_input = click.prompt("Use model quantization model? (4/8/n)", type=str, default="n")
-    if use_dist_input.lower() == "n":
-        use_quant = False
-    elif use_dist_input.lower() == '4' :
-        use_quant = True
-        quant_bit = 4
+    quant_4bit = False
+    quant_8bit = False
+    if use_dist_input.lower() == '4' :
+        quant_4bit = True
     elif use_dist_input.lower() == '8' :
-        use_quant = True
-        quant_bit = 8
+        quant_8bit = True
 
     click.echo("\n========== 프로젝트 설정 ==========")
     # 프로젝트 이름 입력 및 config 디렉토리 하위 폴더 생성
@@ -155,20 +217,18 @@ def train():
 
     # 캐시 파일에 저장된 모델 경로를 그대로 사용 (llama, whisper, beats)
     click.echo("\n========== 캐시에서 모델 경로 설정 ==========")
-    llama_path = select_model_path_by_keyword(cache, "llama")
-    whisper_path = select_model_path_by_keyword(cache, "whisper")
-    beats_path = select_model_path_by_keyword(cache, "beats")
-    click.echo(f"llama_path 자동 설정: {llama_path}")
-    click.echo(f"whisper_path 자동 설정: {whisper_path}")
-    click.echo(f"beats_path 자동 설정: {beats_path}")
+    llama_path = select_model_path_by_keyword(cache, selected_models['llm'])
+    whisper_path = select_model_path_by_keyword(cache, selected_models['encoder_asr'])
+    beats_path = select_model_path_by_keyword(cache, selected_models['encoder_aac'])
+    click.echo(f"llama_path : {llama_path}")
+    click.echo(f"whisper_path : {whisper_path}")
+    click.echo(f"beats_path : {beats_path}")
 
     # end_sym은 cache 내 llm 선택 모델의 eos_token 값 사용
     end_sym = cache.get(selected_models.get("llm"), {}).get("eos_token", "")
     if not end_sym:
         click.echo("캐시에서 eos_token을 찾을 수 없습니다. 직접 입력해주세요.")
         end_sym = click.prompt("end_sym 입력", type=str)
-    # ckpt (비워두거나 필요 시 입력)
-    ckpt = click.prompt("ckpt (모델 체크포인트, 없으면 엔터)", default="", show_default=False)
 
     # output_dir은 OUTPUT_DIR 하위에 프로젝트 이름 폴더 생성
     output_dir_path = OUTPUT_DIR / project_name
@@ -244,16 +304,12 @@ def train():
 
     training_params["evaluate"] = click.confirm("테스트 데이터에 대해 평가를 진행하시겠습니까?", default=defaults["evaluate"])
 
-    # use_distributed 및 GPU 선택 옵션을 run 설정에 반영 (분산 학습이 아닐 경우 device에 GPU 번호를 반영)
-    run_device = f"cuda:{gpu_choice}" if not use_distributed and gpu_choice is not None else "cuda"
-
     # YAML 파일 생성 – 반드시 지정된 형식을 준수
     yaml_params = {
         # 모델 경로 설정
         "llama_path": llama_path,
         "whisper_path": whisper_path,
         "beats_path": beats_path,
-        "only_preprocessor" : False,
         "ckpt": ckpt,
         "end_sym": end_sym,
         
@@ -266,17 +322,22 @@ def train():
         "accum_grad_iters": training_params["accum_grad_iters"],
         "batch_size_train": training_params["batch_size_train"],
         "batch_size_eval": training_params["batch_size_eval"],
-        "device": run_device,
         "use_distributed": use_distributed,
+        "run_device" : gpu_choice,
+        
+        "quant_4bit" : quant_4bit,
+        "quant_8bit" : quant_8bit,
+        "world_size" : world_size,
+        
+        
         
         # 최적화 설정
         "max_epoch": training_params["max_epoch"],
         "warmup_steps": training_params["warmup_steps"],        
     }
 
-    # YAML 파일 3종 (train_stage1.yaml, train_stage2.yaml, evaluation.yaml) 생성
-    filenames = ["train_stage1.yaml", "train_stage2.yaml", "evaluation.yaml"]
-    templates = [train_template, train_template, eval_template]
+    filenames = ["train.yaml", "evaluation.yaml"]
+    templates = [train_template, eval_template]
     
     for fname, template in zip(filenames, templates):
         config_path = project_config_dir / fname
@@ -290,7 +351,21 @@ def train():
     proceed = click.prompt("\n설정을 확인하셨다면 훈련을 진행하시겠습니까? (y/n)", type=str, default="n")
     if proceed.lower() == "y":
         click.echo("\n==> 훈련을 진행합니다.")
-        # 실제 훈련 코드 (예: train.py 실행 등)를 여기에 추가
+        env = os.environ.copy()
+        env.update({
+            "ACCELERATE_USE_FSDP": "1",
+            "FSDP_CPU_RAM_EFFICIENT_LOADING": "1",
+            "NCCL_IB_DISABLE": "1",
+            "CUDA_LAUNCH_BLOCKING": "1",
+            "TORCH_USE_CUDA_DSA": "1",
+            "CUDA_VISIBLE_DEVICES": "0,1",
+        })
+        if use_distributed == False :
+            env.update({f"CUDA_VISIBLE_DEVICES": "{gpu_choice}"})
+            
+        bash_command = f"accelerate launch train.py --cfg-path {str(project_config_dir)}/train.yaml --stage {stage}"
+        click.echo(f"Executing command: {bash_command}")
+        subprocess.run(bash_command, shell=True, env=env)
     else:
         click.echo("\n==> 훈련이 취소되었습니다.")
 
