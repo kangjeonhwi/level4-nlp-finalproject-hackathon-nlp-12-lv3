@@ -20,8 +20,8 @@ import random
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from transformers import StoppingCriteriaList, AutoTokenizer, AutoModelForCausalLM, AutoConfig
-from peft import LoraConfig, TaskType, get_peft_model
+from transformers import StoppingCriteriaList, AutoTokenizer, AutoModelForCausalLM, AutoConfig, BitsAndBytesConfig
+from peft import LoraConfig, TaskType, get_peft_model, prepare_model_for_kbit_training
 
 from .Qformer import BertConfig, BertLMHeadModel
 from .modeling_llama import LlamaForCausalLM
@@ -105,6 +105,12 @@ class SALMONN(nn.Module):
         self.max_txt_len = max_txt_len
         self.end_sym = end_sym
         self.low_resource = low_resource
+        
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit = True,
+            bnb_4bit_qunat_type = "nf4",
+            bnb_4bit_compute_dtype = torch.float16,
+        )
 
         logging.info('Loading LLaMA Tokenizer')
         self.llama_tokenizer = AutoTokenizer.from_pretrained(llama_path, use_fast=False, token=token)
@@ -113,18 +119,25 @@ class SALMONN(nn.Module):
 
         if not only_preprocessor:
             logging.info('Loading LLaMA Model')
-            if self.low_resource:
-                self.llama_model = AutoModelForCausalLM.from_pretrained(
+            # if self.low_resource:
+            #     self.llama_model = AutoModelForCausalLM.from_pretrained(
+            #         llama_path,
+            #         torch_dtype=torch.float16,
+            #         load_in_8bit=True,
+            #         device_map={"": device_8bit},
+            #         token=token,
+            #     )
+            # else:
+            #     self.llama_model = AutoModelForCausalLM.from_pretrained(
+            #         llama_path,
+            #         torch_dtype=torch.float16,
+            #         token=token,
+            #     )
+            
+            self.llama_model = AutoModelForCausalLM.from_pretrained(
                     llama_path,
-                    torch_dtype=torch.float16,
-                    load_in_8bit=True,
-                    device_map={"": device_8bit},
-                    token=token,
-                )
-            else:
-                self.llama_model = AutoModelForCausalLM.from_pretrained(
-                    llama_path,
-                    torch_dtype=torch.float16,
+                    quantization_config=bnb_config, 
+                    device_map="auto",
                     token=token,
                 )
 
@@ -140,10 +153,13 @@ class SALMONN(nn.Module):
                     r=lora_rank, 
                     lora_alpha=lora_alpha, 
                     lora_dropout=lora_dropout,
+                    use_dora=True,
                 )
+                self.llama_model = prepare_model_for_kbit_training(self.llama_model)
                 self.llama_model = get_peft_model(self.llama_model, self.peft_config)
                 self.llama_model.print_trainable_parameters()
                 logging.info('LoRA Training')
+        
         assert whisper_path
         logging.info('Loading Whisper Model')
         self.speech_encoder = WhisperModel.from_pretrained(whisper_path).encoder
