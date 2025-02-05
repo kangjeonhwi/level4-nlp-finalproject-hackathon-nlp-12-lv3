@@ -12,7 +12,17 @@ from torch.utils.data import Dataset, DataLoader
 EMBEDDING_DIR = "/Users/sangjunpark/Desktop/AI/boostcamp AI Tech/hackathon/level4-nlp-finalproject-hackathon-nlp-12-lv3/datasets/output_inps_1"
 ATTENTION_DIR = "/Users/sangjunpark/Desktop/AI/boostcamp AI Tech/hackathon/level4-nlp-finalproject-hackathon-nlp-12-lv3/datasets/output_attns_1"
 
-def make_position_embeddings(self, device):
+def get_rotary_embedding(seq_len, head_dim, base=10000, device='cuda:0'):
+    inv_freq = 1.0 / (base ** (torch.arange(0, head_dim, 2, device=device).float() / head_dim))
+    positions = torch.arange(seq_len, device=device).unsqueeze(1).float()
+    sinusoid_inp = positions * inv_freq
+    sin = torch.sin(sinusoid_inp)
+    cos = torch.cos(sinusoid_inp)  
+    sin = torch.repeat_interleave(sin, 2, dim=-1)
+    cos = torch.repeat_interleave(cos, 2, dim=-1)
+    return cos.half().unsqueeze(0), sin.half().unsqueeze(0)
+
+def make_position_embeddings(device):
     rotary_dim = getattr(model.config, "rotary_dim", model.config.hidden_size // model.config.num_attention_heads)
     q_rotary_dim = 32
     k_rotary_dim = 8
@@ -27,6 +37,7 @@ def make_position_embeddings(self, device):
     sin_k = sin[..., :k_rotary_dim]  # [1, 2048, 8]
     
     position_embeddings = ((cos_q, cos_k), (sin_q, sin_k))
+    return position_embeddings
 
 class EmbeddingAttentionFilesDataset(Dataset):
     def __init__(self, embedding_dir, attention_dir, transform=None):
@@ -229,8 +240,12 @@ def quant_sequential(model, dataloader, dev, saved_block_precision):
             return tmp
 
         handles = []
-        position_embeddings = make_position_embeddings(model, dev)
-        
+        # position_embeddings = make_position_embeddings(model, dev)
+        if hasattr(model.model, "embed_positions"):
+            position_embeddings = model.model.embed_positions(inps[j].unsqueeze(0).shape[1])
+        else:
+            position_embeddings = make_position_embeddings(dev)
+            
         for name in gptq:
             handles.append(subset[name].register_forward_hook(add_batch(name)))
         for j in range(args.nsamples):
