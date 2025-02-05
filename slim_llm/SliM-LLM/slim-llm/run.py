@@ -12,6 +12,22 @@ from torch.utils.data import Dataset, DataLoader
 EMBEDDING_DIR = "/Users/sangjunpark/Desktop/AI/boostcamp AI Tech/hackathon/level4-nlp-finalproject-hackathon-nlp-12-lv3/datasets/output_inps_1"
 ATTENTION_DIR = "/Users/sangjunpark/Desktop/AI/boostcamp AI Tech/hackathon/level4-nlp-finalproject-hackathon-nlp-12-lv3/datasets/output_attns_1"
 
+def make_position_embeddings(self, device):
+    rotary_dim = getattr(model.config, "rotary_dim", model.config.hidden_size // model.config.num_attention_heads)
+    q_rotary_dim = 32
+    k_rotary_dim = 8
+    max_length = 2048
+    cos, sin = get_rotary_embedding(max_length, rotary_dim, device=device)
+    cos = cos.half()
+    sin = sin.half()
+    
+    cos_q = cos[..., :q_rotary_dim]  # [1, 2048, 32]
+    sin_q = sin[..., :q_rotary_dim]  # [1, 2048, 32]
+    cos_k = cos[..., :k_rotary_dim]  # [1, 2048, 8]
+    sin_k = sin[..., :k_rotary_dim]  # [1, 2048, 8]
+    
+    position_embeddings = ((cos_q, cos_k), (sin_q, sin_k))
+
 class EmbeddingAttentionFilesDataset(Dataset):
     def __init__(self, embedding_dir, attention_dir, transform=None):
         self.embedding_dir = embedding_dir
@@ -213,10 +229,12 @@ def quant_sequential(model, dataloader, dev, saved_block_precision):
             return tmp
 
         handles = []
+        position_embeddings = make_position_embeddings(model, dev)
+        
         for name in gptq:
             handles.append(subset[name].register_forward_hook(add_batch(name)))
         for j in range(args.nsamples):
-            outs[j] = layer(inps[j].unsqueeze(0), attention_mask=attention_mask)[0]
+            outs[j] = layer(inps[j].unsqueeze(0), attention_mask=attention_mask, position_embeddings=position_embeddings)[0]
         for h in handles:
             h.remove()
 
