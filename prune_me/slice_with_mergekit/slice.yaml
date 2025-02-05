@@ -1,9 +1,9 @@
 base_model:
-  model: meta-llama/Llama-3.2-3B-Instruct
+  model: meta-llama/Llama-3.2-1B-Instruct
 
 slices:
   - sources:
-      - model: meta-llama/Llama-3.2-3B-Instruct
+      - model: meta-llama/Llama-3.2-1B-Instruct
         layer_range: [0,18]
   - sources:
       - model: meta-llama/Llama-3.2-3B-Instruct

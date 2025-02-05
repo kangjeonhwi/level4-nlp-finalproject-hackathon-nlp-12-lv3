@@ -111,8 +111,8 @@ def main(model_path: str, dataset: str, dataset_column: str, batch_size: int, ma
 
     peft_model.eval()
 
-    input_embeds = load_dataset_from_tensor(tensor_file)[:100]
-    attention = load_dataset_from_tensor(attention_file)[:100]
+    input_embeds = load_dataset_from_tensor(tensor_file)
+    attention = load_dataset_from_tensor(attention_file)
     
     dataloader = DataLoader(
         dataset=TensorDataset(input_embeds, attention),
@@ -122,12 +122,12 @@ def main(model_path: str, dataset: str, dataset_column: str, batch_size: int, ma
 
     # Initialize a list to store distances for each block across the dataset
     all_distances = [[] for _ in range(base_model.config.num_hidden_layers - layers_to_skip)]
-    hidden_size_mapping = nn.Linear(2048, 3072).to(device)
+    # hidden_size_mapping = nn.Linear(2048, 3072).to(device)
 
 
     for batch in tqdm(dataloader, desc="Processing batches"):
         input_embeds = batch[0].to(device).to(torch.float32)
-        input_embeds = hidden_size_mapping(input_embeds)
+        # input_embeds = hidden_size_mapping(input_embeds)
         input_embeds = input_embeds.squeeze(1)
         attention = batch[1].squeeze(1)
         
@@ -135,16 +135,11 @@ def main(model_path: str, dataset: str, dataset_column: str, batch_size: int, ma
             outputs = peft_model(input_ids=None, inputs_embeds=input_embeds, attention_mask=attention)
         hidden_states = outputs.hidden_states
         last_non_padded_hidden_states = get_last_non_padded_tokens(hidden_states, attention)
-
-        # Remove the first element to account for the input layer not being considered a model hidden layer
-        # This adjustment is necessary for analyses focusing on the model's internal transformations
         last_non_padded_hidden_states = last_non_padded_hidden_states[1:]
         
-        # Ensure that the length of last_non_padded_hidden_states matches the number of model hidden layers minus one
         assert len(last_non_padded_hidden_states) == peft_model.config.num_hidden_layers, "Length of last_non_padded_hidden_states  \
         does not match expected number of hidden layers."
-
-        # Compute distances and append to all_distances
+        
         distances = compute_block_distances(last_non_padded_hidden_states, layers_to_skip)
         for i, distance in enumerate(distances):
             all_distances[i].append(distance)
