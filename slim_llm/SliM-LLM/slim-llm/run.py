@@ -104,7 +104,9 @@ def get_model(model):
         model.seqlen = model.config.max_position_embeddings
     elif "llama" in model:
         from transformers import LlamaForCausalLM
-        model = LlamaForCausalLM.from_pretrained(model, torch_dtype="auto")
+        model = LlamaForCausalLM.from_pretrained(model, torch_dtype=torch.float32)
+        model.config.use_cache = False
+        
         if "llama-3" in name.lower():
             model.seqlen = 2048
         else:
@@ -167,10 +169,12 @@ def quant_sequential(model, dataloader, dev, saved_block_precision):
     layers[0] = Catcher(layers[0])
     for batch in dataloader:
         embeddings, attn_masks = batch
+        embeddings = embeddings.to(dev).to(torch.float32)
+        attn_masks = attn_masks.to(dev).to(torch.float32) if attn_masks is not None else None
         try:
             model(
-                input_embeds=embeddings.to(dev), 
-                attention_mask=attn_masks.to(dev) 
+                input_embeds=embeddings,
+                attention_mask=attn_masks
                 if attn_masks is not None 
                 else None
             )
@@ -266,7 +270,7 @@ def quant_sequential(model, dataloader, dev, saved_block_precision):
             for name in gptq:
                 handles.append(subset[name].register_forward_hook(get_block(name)))
             for j in tqdm.tqdm(range(args.nsamples), desc="Determining block precision..."):
-                outs[j] = layer(inps[j].unsqueeze(0), attention_mask=attention_mask)[0]
+                outs[j] = layer(inps[j].unsqueeze(0), attention_mask=attention_mask, position_embeddings=position_embeddings)[0]
             for h in handles:
                 h.remove()
         # end
