@@ -108,7 +108,7 @@ class SALMONN(nn.Module):
         
         bnb_config = BitsAndBytesConfig(
             load_in_4bit = True,
-            bnb_4bit_qunat_type = "nf4",
+            bnb_4bit_quant_type = "nf4",
             bnb_4bit_compute_dtype = torch.float16,
         )
 
@@ -137,11 +137,11 @@ class SALMONN(nn.Module):
             self.llama_model = AutoModelForCausalLM.from_pretrained(
                     llama_path,
                     quantization_config=bnb_config, 
-                    device_map="auto",
+                    device_map=None,
                     token=token,
                 )
 
-            self.llama_model.resize_token_embeddings(len(self.llama_tokenizer))
+            self.llama_model.resize_token_embeddings(len(self.llama_tokenizer), mean_resizing=False)
             for name, param in self.llama_model.named_parameters():
                 param.requires_grad = False
             logging.info('Loading LLaMA Done')
@@ -153,7 +153,7 @@ class SALMONN(nn.Module):
                     r=lora_rank, 
                     lora_alpha=lora_alpha, 
                     lora_dropout=lora_dropout,
-                    use_dora=True,
+                    # use_dora=True,
                 )
                 self.llama_model = prepare_model_for_kbit_training(self.llama_model)
                 self.llama_model = get_peft_model(self.llama_model, self.peft_config)

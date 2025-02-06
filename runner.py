@@ -9,7 +9,8 @@ import logging
 
 import torch
 import torch.distributed as dist
-from torch.nn.parallel import DistributedDataParallel as DDP
+# from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from tensorboardX import SummaryWriter
 import wandb
 
@@ -60,11 +61,15 @@ class Runner:
 
         # model
         self._model = model
-        self._model.to(self.device)
+        # self._model.to(self.device)
         if self.use_distributed:
-            self.model = DDP(
-                self._model, device_ids=[self.config.config.run.gpu]
-            )
+            # self.model = DDP(
+            #     self._model, device_ids=[self.config.config.run.gpu]
+            # )
+            # 1) 모델을 GPU로 옮김 (단, meta라면 로딩 시점에 CPU -> GPU 처리)
+            self._model = self._model.to(self.device)
+            # 2) FSDP로 감싸기
+            self.model = FSDP(self._model)
         else:
             self.model = self._model
 
@@ -97,7 +102,13 @@ class Runner:
         
     def unwrap_dist_model(self, model):
         if self.use_distributed:
-            return model.module
+            # return model.module
+            # 만약 FSDP를 쓴다면:
+            if isinstance(model, FSDP):
+                return model
+            # 혹은 예전 코드에서 DDP이면:
+            elif hasattr(model, "module"):
+                return model.module
         else:
             return model
 
