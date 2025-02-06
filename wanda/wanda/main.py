@@ -7,6 +7,7 @@ from importlib.metadata import version
 
 from lib.prune import prune_wanda, prune_magnitude, prune_sparsegpt, prune_ablate, check_sparsity, find_layers
 from lib.eval import eval_ppl, eval_zero_shot
+from safetensors.torch import load_file
 
 print('torch', version('torch'))
 print('transformers', version('transformers'))
@@ -14,6 +15,8 @@ print('accelerate', version('accelerate'))
 print('# of gpus: ', torch.cuda.device_count())
 
 def get_llm(model_name, cache_dir="llm_weights"):
+    MODEL_PATH = "/data/home/models/pruned_model/wanda_llama_1b_pruned/model.safetensors"
+
     model = AutoModelForCausalLM.from_pretrained(
         model_name, 
         torch_dtype=torch.float16, 
@@ -21,6 +24,9 @@ def get_llm(model_name, cache_dir="llm_weights"):
         low_cpu_mem_usage=True, 
         device_map="auto"
     )
+    
+    state_dict = load_file(MODEL_PATH)
+    model.load_state_dict(state_dict, strict=False)
 
     model.seqlen = model.config.max_position_embeddings 
     return model
@@ -58,7 +64,7 @@ def main():
     model.eval()
     tokenizer = AutoTokenizer.from_pretrained(args.model, use_fast=False, truncation=True, max_length=16384)
 
-    device = torch.device("cuda:0")
+    device = torch.device("cpu")
     if "30b" in args.model or "65b" in args.model: # for 30b and 65b we use device_map to load onto multiple A6000 GPUs, thus the processing here.
         device = model.hf_device_map["lm_head"]
     print("use device ", device)

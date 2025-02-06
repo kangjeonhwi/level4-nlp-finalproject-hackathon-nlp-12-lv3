@@ -84,7 +84,7 @@ def get_rotary_embedding(seq_len, head_dim, base=10000, device='cuda:0'):
     cos = torch.repeat_interleave(cos, 2, dim=-1)
     return cos.half().unsqueeze(0), sin.half().unsqueeze(0)
 
-def load_samples_from_directory(directory, file_pattern="*.pt", nsamples=128, map_location="cuda", pad_token=0.0):
+def load_samples_from_directory(directory, file_pattern="*.pt", nsamples=128, map_location="cpu", pad_token=0.0):
     file_paths = glob.glob(os.path.join(directory, file_pattern))
     file_paths.sort()
     file_paths = file_paths[:nsamples]
@@ -238,10 +238,10 @@ def prepare_calibration_input(model, dataloader, device):
         cos = cos.half()
         sin = sin.half()
         
-        cos_q = cos[..., :q_rotary_dim]  # [1, 2048, 32]
-        sin_q = sin[..., :q_rotary_dim]  # [1, 2048, 32]
-        cos_k = cos[..., :k_rotary_dim]  # [1, 2048, 8]
-        sin_k = sin[..., :k_rotary_dim]  # [1, 2048, 8]
+        cos_q = cos[..., :q_rotary_dim]  
+        sin_q = sin[..., :q_rotary_dim]  
+        cos_k = cos[..., :k_rotary_dim]  
+        sin_k = sin[..., :k_rotary_dim]  
         
         position_embeddings = ((cos_q, cos_k), (sin_q, sin_k))
 
@@ -261,7 +261,7 @@ def return_given_alpha(alpha, sort_res, W_metric, tmp_metric, sum_before):
     
     return W_mask, cur_sparsity
 
-def prune_magnitude(args, model, tokenizer, device=torch.device("cuda:0"), prune_n=0, prune_m=0):
+def prune_magnitude(args, model, tokenizer, device=torch.device("cpu"), prune_n=0, prune_m=0):
     layers = model.model.layers 
 
     for i in range(len(layers)):
@@ -283,12 +283,12 @@ def prune_magnitude(args, model, tokenizer, device=torch.device("cuda:0"), prune
 
             W[W_mask] = 0
 
-def prune_wanda(args, model, tokenizer, device=torch.device("cuda:0"), prune_n=0, prune_m=0):
+def prune_wanda(args, model, tokenizer, device=torch.device("cpu"), prune_n=0, prune_m=0):
     use_cache = model.config.use_cache 
     model.config.use_cache = False 
 
-    inps_directory = "/data/home/psj/level4-nlp-finalproject-hackathon-nlp-12-lv3/wanda/wanda/datasets/output_inps_1"
-    attn_directory = "/data/home/psj/level4-nlp-finalproject-hackathon-nlp-12-lv3/wanda/wanda/datasets/output_atts_1"
+    inps_directory = "/data/home/psj/level4-nlp-finalproject-hackathon-nlp-12-lv3/datasets/output_inps_1"
+    attn_directory = "/data/home/psj/level4-nlp-finalproject-hackathon-nlp-12-lv3/datasets/output_attns_1"
     
     dataset = PTPairDataset(inps_directory, attn_directory)
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False, collate_fn=custom_collate_fn)
