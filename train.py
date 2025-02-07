@@ -1,105 +1,99 @@
-# Copyright (2024) Tsinghua University, Bytedance Ltd. and/or its affiliates
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import os
 import argparse
-import random
-
-import numpy as np
 import torch
-import torch.backends.cudnn as cudnn
 import wandb
+import logging
 
-from utils import *
+from transformers import Trainer, TrainingArguments
+from datasets import DatasetDict, Dataset
 from config import Config
-from dist_utils import get_rank, init_distributed_mode
-from models import load_model
+from models.salmonn import SALMONN
 from dataset import SALMONNDataset
-from runner import Runner
-
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='train parameters')
-    parser.add_argument("--cfg-path", type=str, required=True, help='path to configuration file')
+    parser = argparse.ArgumentParser(description="train parameters")
+    parser.add_argument("--cfg-path", type=str, required=True, help="path to configuration file")
     parser.add_argument(
         "--options",
         nargs="+",
-        help="override some settings in the used config, the key-value pair "
-        "in xxx=yyy format will be merged into config file (deprecate), "
-        "change to --cfg-options instead.",
+        help="override settings in the config, in key=value format.",
     )
-    parser.add_argument("--dryrun", action='store_true', help='if True, use dummy model and skip forward/backward')
-
+    parser.add_argument("--dryrun", action="store_true", help="if True, use dummy model and skip forward/backward")
     return parser.parse_args()
 
-
-def setup_seeds(config):
-    seed = config.seed + get_rank()
-
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-
-    cudnn.benchmark = False
-    cudnn.deterministic = True
-
+def load_datasets(config):
+    """ 기존 SALMONNDataset을 HF Trainer에서 사용할 수 있도록 변환 """
+    datasets = {
+        "train": SALMONNDataset(config.prefix, config.train_ann_path, config.whisper_path),
+        "valid": SALMONNDataset(config.prefix, config.valid_ann_path, config.whisper_path),
+        "test": SALMONNDataset(config.prefix, config.test_ann_path, config.whisper_path),
+    }
+    
+    def preprocess(sample):
+        """ 텍스트 토큰화 및 전처리 """
+        return {
+            "spectrogram": sample["spectrogram"].numpy(),
+            "raw_wav": sample["raw_wav"],
+            "text": sample["text"],
+            "task": sample["task"],
+            "Q": sample["Q"],
+            "id": sample["id"],
+        }
+    
+    datasets = DatasetDict({k: Dataset.from_list([preprocess(d) for d in v]) for k, v in datasets.items()})
+    datasets.set_format("torch")
+    return datasets
 
 def main():
-    # set before init_distributed_mode() to ensure the same job_id shared across all ranks.
-    job_id = now()
-
-    # load config
     args = parse_args()
+    
+    # Config 로드
     cfg = Config(args)
     run_config = cfg.config.run
     model_config = cfg.config.model
     data_config = cfg.config.datasets
 
-    # initialize distributed training
-    init_distributed_mode(run_config)
-    setup_seeds(run_config)
-    setup_logger() # set after init_distributed_mode() to only log on master.
+    # WandB 설정
+    wandb.init(project="hf_trainer_salmonn", name=run_config.exp_name)
 
-    # Wandb logger
-    global_rank = int(os.environ["RANK"])
-    if global_rank == 0:
-        wandb.login()
-        wandb.init(project="audio_lm", name=run_config.exp_name)
+    # 데이터셋 로딩
+    datasets = load_datasets(data_config)
 
-    # print config
-    cfg.pretty_print()
+    # 모델 로드
+    model = SALMONN.from_config(model_config)
 
-    # build datasets
-    datasets = {
-        "train": SALMONNDataset(data_config.prefix, data_config.train_ann_path, data_config.whisper_path),
-        "valid": SALMONNDataset(data_config.prefix, data_config.valid_ann_path, data_config.whisper_path),
-        "test": SALMONNDataset(data_config.prefix, data_config.test_ann_path, data_config.whisper_path),
-    }
+    # Hugging Face Trainer 설정
+    training_args = TrainingArguments(
+        output_dir=run_config.output_dir,
+        evaluation_strategy="epoch",
+        save_strategy="epoch",
+        per_device_train_batch_size=run_config.batch_size,
+        per_device_eval_batch_size=run_config.batch_size,
+        learning_rate=run_config.optims.init_lr,
+        num_train_epochs=run_config.optims.max_epoch,
+        logging_dir=run_config.logging_dir,
+        report_to="wandb",
+        save_total_limit=2,
+        load_best_model_at_end=True,
+        metric_for_best_model="eval_loss",
+    )
 
-    # build model
-    if not args.dryrun:
-        model = load_model(model_config)
-    else: # load small dummy language model
-        from transformers import AutoModelForCausalLM
-        model = AutoModelForCausalLM.from_pretrained("apple/OpenELM-270M-Instruct", trust_remote_code=True)
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        train_dataset=datasets["train"],
+        eval_dataset=datasets["valid"],
+    )
 
-    # build runner
-    runner = Runner(cfg, model, datasets, job_id, args.dryrun)
+    # 학습 실행
+    trainer.train()
+    trainer.save_model(run_config.output_dir)
 
-    # train
-    runner.train()
+    # 평가 실행
+    eval_results = trainer.evaluate()
+    print(f"Validation Results: {eval_results}")
 
+    wandb.finish()
 
 if __name__ == "__main__":
     main()
