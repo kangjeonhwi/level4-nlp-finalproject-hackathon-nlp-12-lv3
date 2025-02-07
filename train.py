@@ -4,7 +4,8 @@ import torch
 import wandb
 import logging
 
-from transformers import Trainer, TrainingArguments
+from transformers import TrainingArguments
+from trl import SFTTrainer
 from datasets import DatasetDict, Dataset
 from config import Config
 from models.salmonn import SALMONN
@@ -54,7 +55,7 @@ def main():
     data_config = cfg.config.datasets
 
     # WandB 설정
-    wandb.init(project="hf_trainer_salmonn", name=run_config.exp_name)
+    wandb.init(project="hf_sft_trainer_salmonn", name=run_config.exp_name)
 
     # 데이터셋 로딩
     datasets = load_datasets(data_config)
@@ -62,7 +63,7 @@ def main():
     # 모델 로드
     model = SALMONN.from_config(model_config)
 
-    # Hugging Face Trainer 설정
+    # Hugging Face TrainingArguments 설정
     training_args = TrainingArguments(
         output_dir=run_config.output_dir,
         evaluation_strategy="epoch",
@@ -78,11 +79,13 @@ def main():
         metric_for_best_model="eval_loss",
     )
 
-    trainer = Trainer(
+    # SFTTrainer 설정
+    trainer = SFTTrainer(
         model=model,
         args=training_args,
         train_dataset=datasets["train"],
         eval_dataset=datasets["valid"],
+        dataset_text_field="text",  # Causal LM 훈련을 위한 텍스트 필드 지정
     )
 
     # 학습 실행
