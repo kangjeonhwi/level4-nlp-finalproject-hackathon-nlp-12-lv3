@@ -226,6 +226,51 @@ class SALMONN(nn.Module):
                 self.prompt_dict[task] = [prompt_template.format(p) for p in filted_prompts]
             print("Loading training prompts done!")
 
+    def _encode_auditory_feature(self, speech_embeds, audio_embeds=None):
+        with self.maybe_autocast():
+            if self.use_speech_Qformer:
+                speech_embeds = self.ln_speech(speech_embeds)
+                if audio_embeds is not None:
+                    audio_embeds = self.ln_audio(audio_embeds)
+                    if audio_embeds.size(1) < speech_embeds.size(1):
+                        audio_embeds = F.pad(audio_embeds, (0, 0, 0, speech_embeds.size(1) - audio_embeds.size(1)))
+                    elif audio_embeds.size(1) > speech_embeds.size(1):
+                        speech_embeds = F.pad(speech_embeds, (0, 0, 0, audio_embeds.size(1) - speech_embeds.size(1)))
+                    speech_embeds = torch.cat((speech_embeds, audio_embeds), dim=-1)
+                speech_atts = torch.ones(speech_embeds.size()[:-1], dtype=torch.long).to(speech_embeds.device)
+
+                if self.window_level_Qformer:
+                    B, T, C = speech_embeds.shape
+                    kernel = round(1500 * self.second_per_window / 30.0)
+                    stride = round(1500 * self.second_stride / 30.0)
+                    kernel = (1, kernel)
+                    stride = (1, stride)
+                    speech_embeds_tr = speech_embeds.transpose(1, 2).unsqueeze(2)
+                    speech_embeds_overlap = F.unfold(speech_embeds_tr, kernel_size=kernel, dilation=1, padding=0, stride=stride)
+                    _, _, L = speech_embeds_overlap.shape
+                    speech_embeds_overlap = speech_embeds_overlap.view(B, -1, kernel[1], L)
+                    speech_embeds_overlap = torch.permute(speech_embeds_overlap, [0, 3, 2, 1])
+                    speech_embeds = speech_embeds_overlap.reshape(-1, kernel[1], C)
+                    speech_atts = torch.ones(speech_embeds.size()[:-1], dtype=torch.long, device=speech_embeds.device)
+
+                query_tokens = self.speech_query_tokens.expand(speech_embeds.shape[0], -1, -1)
+                query_output = self.speech_Qformer.bert(
+                    query_embeds=query_tokens,
+                    encoder_hidden_states=speech_embeds,
+                    encoder_attention_mask=speech_atts,
+                    return_dict=True,
+                )
+                speech_embeds = self.speech_llama_proj(query_output.last_hidden_state)
+
+                if self.window_level_Qformer:
+                    speech_embeds = speech_embeds.view(B, -1, speech_embeds.size(2)).contiguous()
+
+                speech_atts = torch.ones(speech_embeds.size()[:-1], dtype=torch.long).to(speech_embeds.device)
+            else:
+                raise NotImplementedError
+
+        return speech_embeds, speech_atts
+    
     def encode_speech(self, spectrogram, raw_wav=None, audio_padding_mask=None):
         with self.maybe_autocast():
             speech_embeds = self.speech_encoder(spectrogram, return_dict=True).last_hidden_state
