@@ -29,7 +29,6 @@ from .modeling_whisper import WhisperModel
 from .beats.BEATs import BEATsConfig, BEATs
 from .utils import StoppingCriteriaSub
 
-
 class SALMONN(nn.Module):
     @classmethod
     def init_speech_Qformer(cls, num_query_token, speech_width, num_hidden_layers=2):
@@ -145,7 +144,6 @@ class SALMONN(nn.Module):
                 self.llama_model = get_peft_model(self.llama_model, self.peft_config)
                 self.llama_model.print_trainable_parameters()
                 logging.info('LoRA Training')
-
         assert whisper_path
         logging.info('Loading Whisper Model')
         self.speech_encoder = WhisperModel.from_pretrained(whisper_path).encoder
@@ -335,7 +333,7 @@ class SALMONN(nn.Module):
             if self.multi_prompt:
                 prompt = [random.choice(self.prompt_dict[task]) for task in samples["task"]]
                 if "Q" in samples:
-                    prompt = [p.format(q) if '{}' in p else p for p, q in zip(prompt, samples["Q"]) ]
+                    prompt = [p.format(q) if '{}' in p else p for p, q in zip(prompt, samples["Q"])]
             else:
                 prompt = random.choice(self.prompt_dict[samples["task"][0]])
 
@@ -384,7 +382,7 @@ class SALMONN(nn.Module):
         inputs_embeds = torch.cat([bos_embeds, speech_embeds, to_regress_embeds], dim=1)
         attention_mask = torch.cat([atts_bos, speech_atts, to_regress_tokens.attention_mask], dim=1)
 
-        # calulate loss
+        # calculate loss
         with self.maybe_autocast():
             outputs = self.llama_model(
                 inputs_embeds=inputs_embeds,
@@ -402,7 +400,6 @@ class SALMONN(nn.Module):
             correct = (results[mask] == labels[mask]).float().sum()
             total = len(labels[mask])
 
-        if verbose:
             return {"loss": loss, "correct": correct, "total": total}
 
         return {"loss": loss}
