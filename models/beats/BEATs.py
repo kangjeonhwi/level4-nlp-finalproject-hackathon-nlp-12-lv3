@@ -12,6 +12,8 @@ import torch
 import torch.nn as nn
 from torch.nn import LayerNorm
 import torchaudio.compliance.kaldi as ta_kaldi
+from torch.cuda.amp import autocast
+from torch.nn.attention import SDPBackend, sdpa_kernel
 
 from .backbone import (
     TransformerEncoder,
@@ -77,13 +79,15 @@ class BEATs(nn.Module):
         logger.info(f"BEATs Config: {cfg.__dict__}")
 
         self.cfg = cfg
-
         self.embed = cfg.embed_dim
         self.post_extract_proj = (
             nn.Linear(self.embed, cfg.encoder_embed_dim)
             if self.embed != cfg.encoder_embed_dim
             else None
         )
+
+        torch.backends.cudnn.benchmark = True
+        torch.backends.cudnn.enabled = True
 
         self.input_patch_size = cfg.input_patch_size
         self.patch_embedding = nn.Conv2d(1, self.embed, kernel_size=self.input_patch_size, stride=self.input_patch_size,
@@ -130,6 +134,29 @@ class BEATs(nn.Module):
         fbank = (fbank - fbank_mean) / (2 * fbank_std)
         return fbank
 
+    def preprocess_fast(
+            self,
+            source: torch.Tensor,
+            fbank_mean: float = 15.41663,
+            fbank_std: float = 6.55582,
+    ) -> torch.Tensor:
+        source = source.pin_memory() if not source.is_cuda else source
+        with torch.amp.autocast('cuda') :
+            with torch.no_grad() :
+                fbanks = [
+                ta_kaldi.fbank(
+                    waveform.unsqueeze(0) * 2 ** 15,
+                    num_mel_bins=128,
+                    sample_frequency=16000,
+                    frame_length=25,
+                    frame_shift=10
+                ).to('cuda', non_blocking=True)
+                for waveform in source
+                ]
+            fbank = torch.stack(fbanks, dim=0)
+            fbank = (fbank - fbank_mean) / (2 * fbank_std)
+        return fbank.to(torch.float32)
+        
     def extract_features(
             self,
             source: torch.Tensor,
@@ -162,6 +189,60 @@ class BEATs(nn.Module):
             padding_mask=padding_mask,
         )
 
+        if not feature_only and self.predictor is not None:
+            x = self.predictor_dropout(x)
+            logits = self.predictor(x)
+
+            if padding_mask is not None and padding_mask.any():
+                logits[padding_mask] = 0
+                logits = logits.sum(dim=1)
+                logits = logits / (~padding_mask).sum(dim=1).unsqueeze(-1).expand_as(logits)
+            else:
+                logits = logits.mean(dim=1)
+
+            lprobs = torch.sigmoid(logits)
+
+            return lprobs, padding_mask
+        else:
+            return x, padding_mask
+
+    def extract_features_fast(
+            self,
+            source: torch.Tensor,
+            padding_mask: Optional[torch.Tensor] = None,
+            fbank_mean: float = 15.41663,
+            fbank_std: float = 6.55582,
+            feature_only=False,
+    ):  
+        source = source.clone().detach().to('cuda', non_blocking=True)
+        fbank = self.preprocess_fast(source, fbank_mean=fbank_mean, fbank_std=fbank_std).to(torch.float32)
+
+        if padding_mask is not None:
+            padding_mask = padding_mask.clone().detach().to('cuda', non_blocking=True)
+            padding_mask = self.forward_padding_mask(fbank, padding_mask)
+
+        fbank = fbank.unsqueeze(1)
+        with torch.amp.autocast('cuda') :
+            features = self.patch_embedding(fbank)
+            features = features.reshape(features.shape[0], features.shape[1], -1)
+            features = features.transpose(1, 2)  # (B, T, D)
+            features = self.layer_norm(features)
+            
+            if padding_mask is not None:
+                padding_mask = self.forward_padding_mask(features, padding_mask)
+
+            if self.post_extract_proj is not None:
+                features = self.post_extract_proj(features)
+
+            x = self.dropout_input(features)
+            
+        with torch.amp.autocast('cuda'):  # FP16 사용
+            with sdpa_kernel(SDPBackend.FLASH_ATTENTION):  # Flash Attention 활성화
+                x, layer_results = self.encoder(
+                    x,
+                    padding_mask=padding_mask,
+                )
+    
         if not feature_only and self.predictor is not None:
             x = self.predictor_dropout(x)
             logits = self.predictor(x)

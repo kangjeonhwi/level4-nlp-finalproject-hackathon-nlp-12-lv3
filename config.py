@@ -21,11 +21,16 @@ from omegaconf import OmegaConf
 class Config:
     def __init__(self, args):
         self.config = {}
-
         self.args = args
-        user_config = self._build_opt_list(self.args.options)
+
+        # 설정 파일 로드
         config = OmegaConf.load(self.args.cfg_path)
-        config = OmegaConf.merge(config, user_config)
+
+        # options 속성이 있는 경우에만 병합 처리
+        if hasattr(self.args, 'options') and self.args.options:  
+            user_config = self._build_opt_list(self.args.options)
+            config = OmegaConf.merge(config, user_config)
+
         self.config = config
 
     def _convert_to_dot_list(self, opts):
@@ -62,3 +67,16 @@ class Config:
 
     def to_dict(self):
         return OmegaConf.to_container(self.config)
+
+    def notebook_print(self) :
+        """
+        jupyter notebook에는 logging이 표시되지 않아 Experiment 환경에서 Config class를 확인하기 위한 함수.
+        """
+        print("\n=====  Running Parameters    =====")
+        print(self._convert_node_to_json(self.config.run))
+
+        print("\n======  Dataset Attributes  ======")
+        print(self._convert_node_to_json(self.config.datasets))
+
+        print(f"\n======  Model Attributes  ======")
+        print(self._convert_node_to_json(self.config.model))

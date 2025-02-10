@@ -12,7 +12,7 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from tensorboardX import SummaryWriter
 import wandb
-
+from dist_utils import get_rank, init_distributed_mode
 from dist_utils import main_process, is_dist_avail_and_initialized, is_main_process, get_rank, get_world_size
 from logger import MetricLogger, SmoothedValue
 from utils import get_dataloader, prepare_sample
@@ -22,7 +22,7 @@ from custom_metrics import compute_per, compute_f1, compute_wer, compute_spider,
 
 
 class Runner:
-    def __init__(self, cfg, model, datasets, job_id, dryrun):
+    def __init__(self, cfg, model, datasets, job_id, dryrun, stage = "stage1"):
         self.config = cfg
 
         # dryrun (test with dummy model)
@@ -40,7 +40,8 @@ class Runner:
         self.max_epoch = self.config.config.run.optims.max_epoch
         self.evaluate_only = self.config.config.run.evaluate
         self.cuda_enabled = (self.device.type == "cuda")
-
+        self.stage = stage
+        self.best_path = ""
         # test prompt
         self.prompt_template = self.config.config.model.get("prompt_template", "")
         test_prompt_path = self.config.config.model.get("test_prompt_path", "")
@@ -61,6 +62,7 @@ class Runner:
         # model
         self._model = model
         self._model.to(self.device)
+
         if self.use_distributed:
             self.model = DDP(
                 self._model, device_ids=[self.config.config.run.gpu],
@@ -68,7 +70,6 @@ class Runner:
             )
         else:
             self.model = self._model
-
         # dataloaders
         self.train_loader = get_dataloader(datasets["train"], self.config.config.run, is_train=True, use_distributed=self.use_distributed)
         self.valid_loader = get_dataloader(datasets["valid"], self.config.config.run, is_train=False, use_distributed=self.use_distributed)
@@ -104,7 +105,7 @@ class Runner:
 
     def train_epoch(self, epoch):
         self.model.train()
-
+        
         metric_logger = MetricLogger(delimiter="  ")
         metric_logger.add_meter("lr", SmoothedValue(window_size=1, fmt="{value:.6f}"))
         metric_logger.add_meter("loss", SmoothedValue(window_size=1, fmt="{value:.4f}"))
@@ -121,8 +122,10 @@ class Runner:
                 break
             
             samples = next(self.train_loader)
+            # print("Memory before sample", torch.cuda.memory_allocated(dist.get_rank()) / 1024**2, "MB")
             samples = prepare_sample(samples, cuda_enabled=self.cuda_enabled)
-
+            # print("Memory after sample", torch.cuda.memory_allocated(dist.get_rank()) / 1024**2, "MB")
+            
             if not self.dryrun:
                 self.scheduler.step(cur_epoch=epoch, cur_step=i)
 
@@ -133,7 +136,6 @@ class Runner:
                     self.scaler.scale(loss).backward()
                 else:
                     loss.backward()
-
                 if (i + 1) % self.config.config.run.accum_grad_iters == 0:
                     if self.use_amp:
                         self.scaler.step(self.optimizer)
@@ -145,13 +147,13 @@ class Runner:
                 metric_logger.update(loss=loss.item())
                 metric_logger.update(lr=self.optimizer.param_groups[0]["lr"])
                 
-                global_rank = int(os.environ["RANK"])
+                global_rank = int(os.environ.get("RANK", 0))
                 if global_rank == 0:
                     wandb.log({"train/iteration": i, "train/loss": loss.item(), "train/lr": self.optimizer.param_groups[0]["lr"]})
             else: # dryrun, no model availble
                 metric_logger.update(loss=0.0)
                 metric_logger.update(lr=0.0)
-                global_rank = int(os.environ["RANK"])
+                global_rank = int(os.environ.get("RANK", 0))
                 if global_rank == 0:
                     wandb.log({"train/iteration": i, "train/loss": 0.0, "train/lr": 0.0})
 
@@ -459,5 +461,31 @@ class Runner:
             self.output_dir,
             "checkpoint_{}.pth".format("best" if is_best else cur_epoch),
         )
+        if is_best :
+            self.best_path = save_to
         logging.info("Saving checkpoint at epoch {} to {}.".format(cur_epoch, save_to))
         torch.save(save_obj, save_to)
+        
+    def resume_from_checkpoint(self, checkpoint_file):
+        checkpoint = torch.load(checkpoint_file, map_location=self.device)
+        
+        # 모델 상태 복원
+        model_no_ddp = self.unwrap_dist_model(self.model)
+        model_no_ddp.load_state_dict(checkpoint["model"])
+        
+        # Optimizer 상태 복원
+        self.optimizer.load_state_dict(checkpoint["optimizer"])
+        
+        # Scheduler 상태 복원 (존재할 경우)
+        if "scheduler" in checkpoint and self.scheduler is not None:
+            self.scheduler.load_state_dict(checkpoint["scheduler"])
+        
+        # Scaler (혼합 정밀도 사용 시)
+        if self.scaler is not None and checkpoint.get("scaler", None) is not None:
+            self.scaler.load_state_dict(checkpoint["scaler"])
+        
+        # 중단했던 epoch 값 복원 (checkpoint에 저장된 epoch 다음부터 재개)
+        self.start_epoch = checkpoint["epoch"] + 1
+        
+        logging.info("Checkpoint {} loaded. Resuming training from epoch {}.".format(checkpoint_file, self.start_epoch))
+
