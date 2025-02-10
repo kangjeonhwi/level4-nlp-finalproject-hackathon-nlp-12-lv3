@@ -1,116 +1,78 @@
-# SALMONN: Speech Audio Language Music Open Neural Network
+# README
 
-<div align=center><img src="resource/salmon.png" height="256px" width="256px"/></div>
+# 오디오 언어모델의 경량 모델링 레서피 탐구
 
-<h1 align="center">
-  <a href="https://git.io/typing-svg">
-    <img src="https://readme-typing-svg.herokuapp.com/?lines=Hello,+There!+👋;Welcome+to+SALMONN;&center=true&size=30">
-  </a>
-</h1>
+## 프로젝트 개요
 
-🚀🚀 Welcome to the repo of **SALMONN**!
+- **목표**
+Audio Adapter를 결합한 언어모델을 경량화하여 음성, 음악, 환경음 이해 및 다양한 다운스트림 Task를 효율적으로 수행
+- **평가 기준**
+    
+    
+    | 평가 기준 | Task | 평가 지표 | 가중치(순위) |
+    | --- | --- | --- | --- |
+    | 성능 | **ASR**(Automatic Speech Recognition) <br>음성 데이터를 텍스트로 변환 | **WER** <br> Word Error Rate | x 1 |
+    |  | **AAC**(Automated Audio Captioning)    <br> 오디오 콘텐츠를 설명하는 자연어 캡션 생성 | **SPIDEr**    <br> SPICE와 CIDEr 지표를 결합, 오디오 캡션의 의미적 유사성과 문장 합의 평가지표 | x 1 |
+    | 효율성 | **Memory usage** | - | x 2 |
+    |  | **Latency** | **TTFT**+ **TPOT**    <br> **TTFT**(Time to First Token) <br>사용자가 쿼리를 입력한 후 첫 번째 출력 토큰이 생성되기까지 걸리는 시간 <br> **TPOT**(Time Per Output Token) <br>출력 토큰 하나를 생성하는 데 걸리는 시간 | x 2 |
+    | Hidden Task | TBA | TBA | x 1 |
+    - 순위의 가중합으로 최종 순위 결정
 
-SALMONN is a large language model (LLM) enabling **speech, audio events, and music inputs**, which is developed by the Department of Electronic Engineering at Tsinghua University and ByteDance. Instead of speech-only input or audio-event-only input, SALMONN can perceive and understand all kinds of audio inputs and therefore obtain emerging capabilities such as multilingual speech recognition and translation and audio-speech co-reasoning. This can be regarded as giving the LLM "ears" and cognitive hearing abilities, which makes SALMONN a step towards hearing-enabled artificial general intelligence.
+## 프로젝트 수행 절차
 
-<div style='display:flex; gap: 0.25rem; '>
-<a href='https://bytedance.github.io/SALMONN/'><img src='https://img.shields.io/badge/SALMONN_13B-Demo-blue'></a>
-<a href='https://huggingface.co/spaces/tsinghua-ee/SALMONN-7B-gradio'><img src='https://img.shields.io/badge/SALMONN_7B-Demo-orange'></a>
-<a href='https://openreview.net/pdf?id=14rn7HpKVk'><img src='https://img.shields.io/badge/SALMONN_paper-PDF-green'></a>
-<a href='https://openreview.net/pdf?id=nYsh5GFIqX'><img src='https://img.shields.io/badge/video_SALMONN_paper-PDF-green'></a>
-<a href='https://huggingface.co/tsinghua-ee/SALMONN'><img src='https://img.shields.io/badge/huggingface-checkpoint-yellow'></a> 
-</div>
+![image (14)](https://github.com/user-attachments/assets/5e86f71c-819d-451e-8b8f-45bff9476ca8)
 
-## 🌟 Structure
+## 팀원과 역할
 
-The model architecture of SALMONN is shown below. A window-level Q-Former is used as the connection module to fuse the outputs from a Whisper speech encoder and a BEATs audio encoder as augmented audio tokens, which are aligned with the LLM input space. The LoRA adaptor aligns the augmented LLM input space with its output space. The text prompt is used to instruct SALMONN to answer open-ended questions about the general audio inputs and the answers are in the LLM text responses. 
 
-<div align=center><img src="resource/structure.png" height="100%" width="75%"/></div>
+- 강전휘
+    - 학습 및 추론 가속을 위한 deepspeed 도입, LLM Quantization 적용, 학습 편의성을 위한 CLI 구현
+- 박상준
+    - 프루닝, 양자화 관련 논문 탐구 및 구현 (PruneMe, SliM-LLM, Wanda, RIA, Drop-LLM)
+- 박준성
+    - Project Managing, 추론 가속화를 위한 vllm 라이브러리 도입, feature extraction 구현, gradient checkpoint 적용
+- 백승우
+    - 학습 및 추론 가속을 위한 unsloth 도입, LLM Quantization 적용, Task-specific validation metrics 구현
+- 서태영
+    - 논문 리뷰, EDA, 데이터 증강
+- 이재백
+    - 논문 리뷰, 신규 모델 구현, LLM 경량화 실험
 
-## ⚡️ Demos
+## 결과
 
-Compared with traditional speech and audio processing tasks such as speech recognition and audio caption, SALMONN leverages the general knowledge and cognitive abilities of the LLM to achieve a cognitively oriented audio perception, which dramatically improves the versatility of the model and the richness of the task. In addition, SALMONN is able to follow textual commands and even spoken commands with a relatively high degree of accuracy. Since SALMONN only uses training data based on textual commands, listening to spoken commands is also a cross-modal emergent ability.
+| 평가 기준 | Ours | Baseline |
+| --- | --- | --- |
+| WER ↓ | <span style="color:blue"> 0.0770 | 0.0634 |
+| SPIDEr ↑ | <span style="color:red"> 0.3304 | 0.2029 |
+| Memory Usage ↓ | <span style="color:red"> 4.0500 GB | 9.3242 GB |
+| Latency ↓ | <span style="color:red"> 845.8 ms | 1272 ms |
 
-Here are some examples of SALMONN.
+## 개발 환경
 
-| Audio                                                  | Response                                     |
-| ------------------------------------------------------ | -------------------------------------------- |
-| [gunshots.wav](./resource/audio_demo/gunshots.wav)     | ![sac](resource/response_demo/sac.png)       |
-| [duck.wav](./resource/audio_demo/duck.wav)             | ![story](resource/response_demo/story.png)   |
-| [music.wav](./resource/audio_demo/music.wav)           | ![mc](resource/response_demo/mc.png)         |
+| Component | Specification |
+| --- | --- |
+| GPU | NVIDIA Tesla V100 * 2 EA |
+| RAM | 32 GB |
+| OS | Ubuntu-20.04 |
 
-## Datasets
-* Download raw audio files from [here](https://huggingface.co/datasets/lifelongeeek/salmonn_train_stage1_stage2)
-  * Put downloaded directory path into `data_prefix` of config
-  * contains 1.4TB of audio
-    ```
-    168G  WavCaps
-    165G  audiocaps
-    110G  GigaSpeech
-    58G   LibriSpeech
-    3.7G  MusicNet
-    2.0G  Clotho
-    ```
-* Download annotation files from [here](https://huggingface.co/datasets/lifelongeeek/salmonn_dataset_annotation)
-  * place the jsons under `data` directory.
-  * NOTE: Only train split will be released to public.
-
-## 🌈 How to train a model
-
-For SALMONN-13B v1, you need to use the following dependencies:
-1. Our environment: The python version is 3.9.17, and other required packages can be installed with the following command: ```pip install -r requirements.txt```.
-2. Download [whisper large v2](https://huggingface.co/openai/whisper-large-v2/tree/main) to ```whisper_path```.
-3. Download [Fine-tuned BEATs_iter3+ (AS2M) (cpt2)](https://1drv.ms/u/s!AqeByhGUtINrgcpj8ujXH1YUtxooEg?e=E9Ncea) to `beats_path`.
-4. Download [vicuna 13B v1.1](https://huggingface.co/lmsys/vicuna-13b-v1.1/tree/main) to ```llama_path```.
-5. Running with ```python3 train.py --cfg-path configs/config.yaml```
-6. You may try `--dryrun` for loading dataset and dummy small model.
-
-## 🌈 How to inference in CLI
-
-1. Same as **How to train a model: 1-4**.
-2. Download [salmonn v1](https://huggingface.co/tsinghua-ee/SALMONN/blob/main/salmonn_v1.pth) to ```ckpt```.
-3. Running with ```python3 cli_inference.py --cfg-path configs/decode_config.yaml``` Now you can input ```wav_path``` and ```prompt```. Enjoy yourself !
-
-## 🌈 How to launch a web demo
-
-1. Same as **How to train a model: 1-4**.
-2. Download [salmonn v1](https://huggingface.co/tsinghua-ee/SALMONN/blob/main/salmonn_v1.pth) to ```ckpt```.
-3. Running with ```python3 web_demo.py --cfg-path configs/decode_config.yaml```
-
-## 👀 Team
-
-**Team Tsinghua**: Wenyi Yu, Changli Tang, Guangzhi Sun, Chao Zhang
-
-**Team ByteDance**: Xianzhao Chen, Wei Li, Tian Tan, Lu Lu, Zejun Ma
-
-## ✨ Citation
-If you find SALMONN / video-SALMONN useful, please cite the paper:
-```
-@inproceedings{
-  tang2024salmonn,
-  title={{SALMONN}: Towards Generic Hearing Abilities for Large Language Models},
-  author={Changli Tang and Wenyi Yu and Guangzhi Sun and Xianzhao Chen and Tian Tan and Wei Li and Lu Lu and Zejun MA and Chao Zhang},
-  booktitle={The Twelfth International Conference on Learning Representations},
-  year={2024},
-  url={https://openreview.net/forum?id=14rn7HpKVk}
-}
-```
----
-# Audiolm Evaluator
-Audio Language Model Evaluator
+## 코드 실행 방법
 
 ## Install dependencies
+
 ```bash
-git clone --recursive https://github.com/nota-github/audiolm-evaluator
-pip install -r audiolm-trainer/requirements.txt
 pip install -r requirements.txt
-aac-metrics-download
+
 ```
 
 ## Evaluate
+
 `salmonn_eval_config.yaml` 에서 데이터셋 경로, 모델 경로 등을 적절히 수정한 후 아래 스크립트를 실행합니다.
+
 ```python
 python evaluate_salmonn.py --mode {submission_asr, submission_aac, valid_asr, valid_aac}
+
 ```
+
 - submission mode는 제출용인 csv를 만들기 위한 모드입니다.
 - valid mode는 자체적인 평가를 진행하고자 할 때 사용하며 text 라벨이 있는 json 파일이 필요합니다.
 - 두 모드는 서로 다른 디렉토리에 csv 파일이 저장됩니다.
@@ -125,11 +87,14 @@ python evaluate_salmonn.py --mode {submission_asr, submission_aac, valid_asr, va
       "text": "Ground truth for sample" # valid 시 필요
     },
     ...
+
 ```
 
 ## Validate submission file
+
 ```python
 python submission_validator.py /path/to/submission.csv
+
 ```
 
 위 스크립트는 파일의 형식만 확인하며, 샘플의 개수는 validation하지 않습니다.
