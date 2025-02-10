@@ -13,6 +13,10 @@
 # limitations under the License.
 
 from .salmonn import SALMONN
+from .gigachad import GIGACHAD
 
 def load_model(config):
+    use_gigachad = config.get("use_at_model", False)
+    if use_gigachad:
+        return GIGACHAD.from_config(config)
     return SALMONN.from_config(config)

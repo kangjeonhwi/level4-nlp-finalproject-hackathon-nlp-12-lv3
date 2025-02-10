@@ -268,7 +268,7 @@ class SALMONN(nn.Module):
                 raise NotImplementedError
 
         return speech_embeds, speech_atts
-
+    
     def encode_speech(self, spectrogram, raw_wav=None, audio_padding_mask=None):
         with self.maybe_autocast():
             speech_embeds = self.speech_encoder(spectrogram, return_dict=True).last_hidden_state
@@ -448,7 +448,7 @@ class SALMONN(nn.Module):
         return text
 
     @classmethod
-    def from_config(cls, config):
+    def parse_config(cls, config):
         llama_path = config.get("llama_path")
         whisper_path = config.get("whisper_path")
         freeze_whisper = config.get("freeze_whisper", True)
@@ -480,35 +480,44 @@ class SALMONN(nn.Module):
 
         token = config.get("token", None)
         only_preprocessor = config.get("only_preprocessor", None)
+        
+        return {
+            "llama_path" : llama_path,
+            "whisper_path" : whisper_path,
+            "freeze_whisper" : freeze_whisper,
+            "beats_path" : beats_path,
+            "freeze_beats" : freeze_beats,
+            
+            "use_speech_Qformer" : use_speech_Qformer,
+            "num_speech_query_token" : num_speech_query_token,
+            "freeze_speech_QFormer" : freeze_speech_QFormer,
+            "window_level_Qformer" : window_level_Qformer,
+            "second_per_window" : second_per_window,
+            "second_stride" : second_stride,
 
-        model = cls(
-            llama_path=llama_path,
-            whisper_path=whisper_path,
-            freeze_whisper=freeze_whisper,
-            beats_path=beats_path,
-            freeze_beats=freeze_beats,
-            use_speech_Qformer=use_speech_Qformer,
-            num_speech_query_token=num_speech_query_token,
-            freeze_speech_QFormer=freeze_speech_QFormer,
-            window_level_Qformer=window_level_Qformer,
-            second_per_window=second_per_window,
-            second_stride=second_stride,
-            speech_llama_proj_model=speech_llama_proj_model,
-            freeze_speech_llama_proj=freeze_speech_llama_proj,
-            lora=lora,
-            lora_rank=lora_rank,
-            lora_alpha=lora_alpha,
-            lora_dropout=lora_dropout,
-            multi_prompt=multi_prompt,
-            prompt_path=prompt_path,
-            prompt_template=prompt_template,
-            max_txt_len=max_txt_len,
-            end_sym=end_sym,
-            low_resource=low_resource,
-            device_8bit=device_8bit,
-            token=token,
-            only_preprocessor=only_preprocessor,
-        )
+            "speech_llama_proj_model" : speech_llama_proj_model,
+            "freeze_speech_llama_proj" : freeze_speech_llama_proj,
+            
+            "lora" : lora,
+            "lora_rank" : lora_rank,
+            "lora_alpha" : lora_alpha,
+            "lora_dropout" : lora_dropout,
+            
+            "multi_prompt" : multi_prompt,
+            "prompt_path" : prompt_path,
+            "prompt_template" : prompt_template,
+            "max_txt_len" : max_txt_len,
+            "end_sym" : end_sym,
+            "low_resource" : low_resource,
+            "device_8bit" : device_8bit,
+            
+            "token" : token,
+            "only_preprocessor" : only_preprocessor,
+        }
+        
+    @classmethod
+    def from_config(cls, config):
+        model = cls(**cls.parse_config(config))
 
         ckpt_path = config.get("ckpt", "")
         if ckpt_path:

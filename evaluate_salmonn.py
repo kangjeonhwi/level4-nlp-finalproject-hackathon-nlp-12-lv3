@@ -107,6 +107,7 @@ def main(args):
         test_prompt = json.load(f)
 
     # Evaluation
+    # TODO: SALMONN.generate()로 대체 가능
     testset_ids, hyps, refs = [], [], []
     for samples in tqdm(dataloader):
         testset_id = samples["testset_id"]
