@@ -49,6 +49,14 @@ def parse_args():
         required=True, 
         help="Choose training stage: stage1, stage2, or Merged"
     )
+    
+    parser.add_argument(
+        "--quant", 
+        type=str, 
+        choices=["4bit", "8bit"], 
+        required=False, 
+        help="Choose 4bit quantization or 8bit quantization"
+    )
 
     return parser.parse_args()
 

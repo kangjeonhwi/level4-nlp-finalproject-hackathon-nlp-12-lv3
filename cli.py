@@ -6,7 +6,7 @@ import shutil
 import yaml
 import subprocess
 from pathlib import Path
-from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedTokenizerBase
+from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedTokenizerBase, AutoProcessor, AutoModelForSpeechSeq2Seq
 from cli_yaml import train_template, eval_template
 # 기본 경로 설정
 BASE_DIR = Path(os.path.dirname(os.path.abspath(__file__)))
@@ -68,20 +68,33 @@ def select_model(cache, model_type):
         choice = click.prompt(f"{model_type} 모델 번호를 선택하세요", type=int)
         if choice == 0:
             model_name = click.prompt("Huggingface 모델 경로를 입력하세요", type=str)
+            tokenizer = None
             try:
-                model = AutoModelForCausalLM.from_pretrained(
-                    model_name, 
-                    cache_dir=str(MODELS_DIR),
-                    trust_remote_code=True
-                )
-                tokenizer = AutoTokenizer.from_pretrained(
-                    model_name, 
-                    cache_dir=str(MODELS_DIR),
-                    legacy=False, 
-                    use_fast=True,
-                    trust_remote_code=True
-                )
-                assert isinstance(tokenizer, PreTrainedTokenizerBase), "Tokenizer 초기화 실패"
+                if model_type == 'llm' :
+                    model = AutoModelForCausalLM.from_pretrained(
+                        model_name, 
+                        cache_dir=str(MODELS_DIR),
+                        trust_remote_code=True
+                    )
+                    tokenizer = AutoTokenizer.from_pretrained(
+                        model_name, 
+                        cache_dir=str(MODELS_DIR),
+                        use_fast=True,
+                        trust_remote_code=True
+                    )
+                    assert isinstance(tokenizer, PreTrainedTokenizerBase), "Tokenizer 초기화 실패"
+                else :
+                    processor = AutoProcessor.from_pretrained(
+                        model_name,
+                        cache_dir=str(MODELS_DIR),
+                        trust_remote_code=True
+                    )
+                    model = AutoModelForSpeechSeq2Seq.from_pretrained(
+                        model_name, 
+                        cache_dir=str(MODELS_DIR),
+                        trust_remote_code=True
+                    )
+                    
                 click.echo("모델 다운로드 완료.")
                 org_name, model_id = model_name.split('/')
                 final_path = reorganize_model_directory(org_name, model_id)
@@ -92,7 +105,7 @@ def select_model(cache, model_type):
                     "LoRA": has_lora,
                     "type": model_type,
                     "ckpts": [],
-                    "eos_token": tokenizer.eos_token
+                    "eos_token": (tokenizer.eos_token if tokenizer is not None else "None")
                 }
                 save_cache(cache)
                 return model_key
@@ -328,6 +341,7 @@ def train():
         "quant_4bit" : quant_4bit,
         "quant_8bit" : quant_8bit,
         "world_size" : world_size,
+        "stage" : stage,
         
         
         
