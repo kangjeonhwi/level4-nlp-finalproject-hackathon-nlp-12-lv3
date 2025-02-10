@@ -40,10 +40,10 @@ Audio Adapter를 결합한 언어모델을 경량화하여 음성, 음악, 환�
 
 | 평가 기준 | Ours | Baseline |
 | --- | --- | --- |
-| WER ↓ | <span style="color:blue"> 0.0770 | 0.0634 |
-| SPIDEr ↑ | <span style="color:red"> 0.3304 | 0.2029 |
-| Memory Usage ↓ | <span style="color:red"> 4.0500 GB | 9.3242 GB |
-| Latency ↓ | <span style="color:red"> 845.8 ms | 1272 ms |
+| WER ↓ | <span style="color:blue"> 0.0770 </span>| 0.0634 |
+| SPIDEr ↑ | <span style="color:red"> 0.3304 </span>| 0.2029 |
+| Memory Usage ↓ | <span style="color:red"> 4.0500 GB </span>| 9.3242 GB |
+| Latency ↓ | <span style="color:red"> 845.8 ms </span>| 1272 ms |
 
 ## 개발 환경
 
