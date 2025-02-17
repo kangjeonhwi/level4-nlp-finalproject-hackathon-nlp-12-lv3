@@ -1,5 +1,9 @@
 # 오디오 언어모델의 경량 모델링 레서피 탐구
 
+<p align="center">
+    <img src="https://github.com/user-attachments/assets/6db0df5a-ace7-4b2e-bb3b-d1d551807080" width="720" height="540">
+</p>
+
 ## 프로젝트 개요
 
 - **목표**
