@@ -5,7 +5,7 @@
 </p>
 
 ## 프로젝트 개요
-
+[Wrap-UP Report](https://basalt-viscount-15f.notion.site/Lightweight-Audio-Language-Model-1a8cec41a1a2807d9b7ed54190971296?pvs=4)
 - **목표**
 Audio Adapter를 결합한 언어모델을 경량화하여 음성, 음악, 환경음 이해 및 다양한 다운스트림 Task를 효율적으로 수행
 - **평가 기준**
